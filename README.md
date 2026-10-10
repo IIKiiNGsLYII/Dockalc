@@ -40,7 +40,7 @@ If you enjoy Dockalc, you can [buy me a coffee](https://buymeacoffee.com/dockalc
 
 Dockalc is free to download and run for personal or internal use. The source code is visible for reference only and is not licensed for copying, modification, or redistribution. See [LICENSE.txt](LICENSE.txt) for the full terms.
 
-Copyright (c) 2026 Your Name. All rights reserved.
+Copyright (c) 2026 Jacob D. All rights reserved.
 
 ## Credits
 
