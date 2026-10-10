@@ -34,7 +34,9 @@ Your settings and progress are stored on your own computer. The app connects to 
 
 ## Support
 
-If you enjoy Dockalc, you can [buy me a coffee](https://buymeacoffee.com/dockalc).
+If you enjoy Dockalc, you can support it here:
+
+<a href="https://buymeacoffee.com/dockalc"><img src="public/yellow-button.png" alt="Buy me a coffee" height="50"></a>
 
 ## License
 
