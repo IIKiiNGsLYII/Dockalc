@@ -290,7 +290,14 @@ export const CalculatorPage: React.FC = () => {
     onConstant: calc.insertConstant,
     onParenthesis: calc.handleParenthesis,
     onSetMode: calc.setMode,
-    onToggleHistory: () => setHistoryOpen((v) => !v),
+    onToggleHistory: () => {
+      if (calc.settings.compactOverlay === true) {
+        calc.updateSettings({ compactOverlay: false });
+        setHistoryOpen(true);
+      } else {
+        setHistoryOpen((v) => !v);
+      }
+    },
     onToggleMemory: () => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar }),
     onOpenShortcutsModal: () => setShortcutsModalOpen(true),
     onOpenFormulaModal: () => setFormulaModalOpen(true),
@@ -434,12 +441,15 @@ export const CalculatorPage: React.FC = () => {
               <Pin className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isPinned ? 'rotate-45' : ''}`} />
             </button>
 
-            {/* History Toggle (history is hidden in compact mode) */}
-            {!isCompact && (
+            {/* History Toggle (in compact mode it switches back to full size) */}
             <button
               type="button"
               onClick={() => {
-                if (!historyOpen) {
+                if (isCompact) {
+                  calc.updateSettings({ compactOverlay: false });
+                  setHistoryOpen(true);
+                  setDesktopRightTab('history');
+                } else if (!historyOpen) {
                   setHistoryOpen(true);
                   setDesktopRightTab('history');
                 } else if (desktopRightTab === 'history') {
@@ -449,15 +459,14 @@ export const CalculatorPage: React.FC = () => {
                 }
               }}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                historyOpen && desktopRightTab === 'history'
+                isExpandedWithHistory && desktopRightTab === 'history'
                   ? 'bg-primary/20 text-primary font-bold'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
-              title={historyOpen && desktopRightTab === 'history' ? 'Hide History' : 'View History Log (Ctrl+H)'}
+              title={isExpandedWithHistory && desktopRightTab === 'history' ? 'Hide History' : 'View History Log (Ctrl+H)'}
             >
               <HistoryIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.75]" />
             </button>
-            )}
 
             {/* Desktop-Only Accountant Paper Tape Button (conditional on settings) */}
             {!isCompact && calc.settings.showPaperTape !== false && (
