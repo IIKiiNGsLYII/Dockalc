@@ -286,8 +286,9 @@ export function calculateRetirement(inputs: RetirementInputs): RetirementResult 
   const retirementAge = Math.max(currentAge + 1, inputs.retirementAge || 65);
   const currentSavings = Math.max(0, inputs.currentSavings || 0);
   const annualContribution = Math.max(0, inputs.annualContribution || 0);
-  const annualReturn = (inputs.annualReturnPct || 7) / 100;
-  const desiredAnnualSpend = Math.max(0, inputs.desiredAnnualSpend || 50000);
+  // Use ?? so a real 0 (0% return, $0 spending) isn't swapped for the default.
+  const annualReturn = (inputs.annualReturnPct ?? 7) / 100;
+  const desiredAnnualSpend = Math.max(0, inputs.desiredAnnualSpend ?? 50000);
 
   const yearsToRetirement = retirementAge - currentAge;
 

@@ -59,7 +59,7 @@ import {
   type CalculatorTheme,
 } from '@/types/calculator';
 import { toast } from 'sonner';
-import { exportAppData, importAppData, isDesktopApp } from '@/lib/desktop';
+import { isDesktopApp } from '@/lib/desktop';
 import dockalcLogo from '@/assets/Dockalc_Icon.png';
 
 interface SettingsModalProps {
@@ -2457,56 +2457,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* CATEGORY 6: USER STATISTICS & SYSTEM ANALYTICS            */}
           {/* ========================================================= */}
           {activeCategory === 'stats' && (
-            <div className="space-y-4">
-              {/* Backup & Restore */}
-              <div className={`p-3.5 rounded-xl border space-y-2 ${themeClasses.card}`}>
-                <div className={`text-xs font-bold ${themeClasses.heading}`}>Backup & Restore</div>
-                <div className={`text-[11px] ${themeClasses.muted}`}>
-                  {isDesktopApp()
-                    ? 'Your settings, stats and milestones are backed up automatically and carry over to new versions. You can also save a copy to move to another computer.'
-                    : 'Save a copy of your settings, stats and milestones, or load one you saved earlier.'}
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      exportAppData();
-                      toast.success('Backup saved', { description: 'Check your Downloads folder.' });
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
-                  >
-                    Export backup
-                  </button>
-                  <label className={`px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer hover:bg-muted/50 transition-colors ${themeClasses.border} ${themeClasses.heading}`}>
-                    Import backup
-                    <input
-                      type="file"
-                      accept="application/json,.json"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = '';
-                        if (!file) return;
-                        if (!window.confirm('Replace your current settings, stats and milestones with this backup?')) return;
-                        const count = await importAppData(file);
-                        if (count === null) {
-                          toast.error('That file is not a Dockalc backup.');
-                          return;
-                        }
-                        toast.success('Backup restored', { description: 'Reloading Dockalc…' });
-                        setTimeout(() => window.location.reload(), 600);
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-
               <UserStatisticsTab
                 themeClasses={themeClasses}
                 unlockedMilestonesCount={settings.unlockedAchievements?.length || 0}
                 onOpenMilestones={onOpenMilestones}
               />
-            </div>
           )}
         </div>
       </DialogContent>

@@ -26,6 +26,7 @@ import {
 import { getUserStats, resetUserStats, type UserStats } from '@/lib/userStats';
 import { ACHIEVEMENTS_LIST } from '@/lib/numberMagic';
 import { toast } from 'sonner';
+import { exportAppData, importAppData } from '@/lib/desktop';
 
 interface UserStatisticsTabProps {
   themeClasses: {
@@ -174,73 +175,28 @@ export const UserStatisticsTab: React.FC<UserStatisticsTabProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Export/import every Dockalc setting, stat, badge and history entry.
   const handleExportData = () => {
     try {
-      const rawStats = localStorage.getItem('dockcalc_user_stats') || '{}';
-      const rawSettings = localStorage.getItem('dockcalc_settings_v3') || '{}';
-      const rawAchievements = localStorage.getItem('dockcalc_unlocked_achievements') || '[]';
-      const rawTimestamps = localStorage.getItem('dockcalc_achievement_timestamps') || '{}';
-      const rawStreak = localStorage.getItem('dockcalc_daily_streak') || '{}';
-
-      const payload = {
-        version: '1.0',
-        exportedAt: new Date().toISOString(),
-        userStats: JSON.parse(rawStats),
-        settings: JSON.parse(rawSettings),
-        unlockedAchievements: JSON.parse(rawAchievements),
-        achievementTimestamps: JSON.parse(rawTimestamps),
-        dailyStreak: JSON.parse(rawStreak),
-      };
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `dockcalc-data-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Offline statistics & milestones backup downloaded!');
+      exportAppData();
+      toast.success('Backup saved', { description: 'Check your Downloads folder.' });
     } catch {
       toast.error('Failed to export backup data.');
     }
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.userStats) {
-          localStorage.setItem('dockcalc_user_stats', JSON.stringify(data.userStats));
-        }
-        if (data.unlockedAchievements) {
-          localStorage.setItem('dockcalc_unlocked_achievements', JSON.stringify(data.unlockedAchievements));
-        }
-        if (data.achievementTimestamps) {
-          localStorage.setItem('dockcalc_achievement_timestamps', JSON.stringify(data.achievementTimestamps));
-        }
-        if (data.dailyStreak) {
-          localStorage.setItem('dockcalc_daily_streak', JSON.stringify(data.dailyStreak));
-        }
-        if (data.settings) {
-          const cur = JSON.parse(localStorage.getItem('dockcalc_settings_v3') || '{}');
-          localStorage.setItem('dockcalc_settings_v3', JSON.stringify({
-            ...cur,
-            ...data.settings,
-            unlockedAchievements: data.unlockedAchievements || cur.unlockedAchievements,
-          }));
-        }
-        toast.success('Backup restored successfully! Reloading...');
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      } catch {
-        toast.error('Invalid backup file format.');
-      }
-    };
-    reader.readAsText(file);
+    if (!window.confirm('Replace your current settings, stats and milestones with this backup?')) return;
+    const count = await importAppData(file);
+    if (count === null) {
+      toast.error('That file is not a Dockalc backup.');
+      return;
+    }
+    toast.success('Backup restored! Reloading...');
+    setTimeout(() => window.location.reload(), 500);
   };
 
   // Compute Noteworthy Statistics: 4 Key Metrics

@@ -31,6 +31,7 @@ interface DockalcBackup {
   format: 1;
   savedAt: string;
   data: Record<string, string>;
+  legacy?: boolean; // partial 1.0 export: merge instead of replacing everything
 }
 
 // Every key Dockalc writes starts with one of these (both spellings are in use).
@@ -57,10 +58,21 @@ function buildBackup(): DockalcBackup {
   return { app: 'Dockalc', format: 1, savedAt: new Date().toISOString(), data: collectAppData() };
 }
 
+// Backups made by Dockalc 1.0's Export button (stats and badges only).
+function parseLegacyBackup(parsed: Record<string, unknown>): DockalcBackup | null {
+  if (!parsed.userStats) return null;
+  const data: Record<string, string> = { dockcalc_user_stats: JSON.stringify(parsed.userStats) };
+  if (parsed.unlockedAchievements) data.dockcalc_unlocked_achievements = JSON.stringify(parsed.unlockedAchievements);
+  if (parsed.achievementTimestamps) data.dockcalc_achievement_timestamps = JSON.stringify(parsed.achievementTimestamps);
+  if (parsed.dailyStreak) data.dockcalc_daily_streak = JSON.stringify(parsed.dailyStreak);
+  return { app: 'Dockalc', format: 1, savedAt: String(parsed.exportedAt ?? ''), data, legacy: true };
+}
+
 function parseBackup(json: string): DockalcBackup | null {
   try {
-    const parsed = JSON.parse(json) as Partial<DockalcBackup>;
-    if (parsed?.app !== 'Dockalc' || !parsed.data || typeof parsed.data !== 'object') return null;
+    const parsed = JSON.parse(json) as Partial<DockalcBackup> & Record<string, unknown>;
+    if (parsed && parsed.app !== 'Dockalc') return parseLegacyBackup(parsed);
+    if (!parsed?.data || typeof parsed.data !== 'object') return null;
     const data: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed.data)) {
       if (isAppKey(k) && typeof v === 'string') data[k] = v;
@@ -150,7 +162,7 @@ export function exportAppData(): void {
 export async function importAppData(file: File): Promise<number | null> {
   const backup = parseBackup(await file.text());
   if (!backup) return null;
-  const count = applyBackup(backup, true);
+  const count = applyBackup(backup, !backup.legacy);
   lastWritten = '';
   writeDesktopBackupNow();
   return count;

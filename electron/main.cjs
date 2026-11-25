@@ -56,6 +56,11 @@ if (!app.requestSingleInstanceLock()) {
             return { action: 'deny' };
         });
 
+        // Never let the window navigate away from the calculator (e.g. a dropped link).
+        mainWindow.webContents.on('will-navigate', (event, url) => {
+            if (url !== mainWindow.webContents.getURL()) event.preventDefault();
+        });
+
         mainWindow.on('closed', () => {
             mainWindow = null;
             boundsBeforeCompact = null;

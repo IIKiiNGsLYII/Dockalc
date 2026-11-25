@@ -1,6 +1,7 @@
 packages:
   - packages/*
 allowBuilds:
+  electron: true
   electron-winstaller: true
 catalog:
   "@react-three/drei": 9.122.0
