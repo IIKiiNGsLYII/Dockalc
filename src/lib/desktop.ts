@@ -7,6 +7,7 @@ export interface DockalcDesktopBridge {
   setOpacity: (value: number) => void;
   setCompact: (on: boolean) => void;
   setMinSize: (width: number, height: number) => void;
+  setTitleBarColors: (color: string, symbolColor: string) => void;
   readBackup: () => Promise<string | null>;
   writeBackup: (json: string) => void;
 }

@@ -36,6 +36,9 @@ import { toast } from 'sonner';
 import { getDesktop } from '@/lib/desktop';
 import { useDebouncedUse } from '@/hooks/useDebouncedUse';
 
+// Height of the desktop app's own title strip (matches electron/main.cjs)
+const TITLE_BAR_HEIGHT = 32;
+
 export const CalculatorPage: React.FC = () => {
   const calc = useCalculator();
 
@@ -113,6 +116,17 @@ export const CalculatorPage: React.FC = () => {
 
   // In the desktop app these settings drive the real OS window, not just the page.
   const desktop = getDesktop();
+
+  // Match the title bar (and its min/max/close buttons) to the current theme.
+  const [titleColors, setTitleColors] = useState<{ bg: string; fg: string } | null>(null);
+  const themeKey = `${calc.activeTheme.id}|${JSON.stringify(calc.settings.customTheme ?? null)}`;
+  useEffect(() => {
+    if (!desktop || !windowRef.current) return;
+    const cs = getComputedStyle(windowRef.current);
+    const next = { bg: cs.backgroundColor, fg: cs.color };
+    setTitleColors(next);
+    desktop.setTitleBarColors(next.bg, next.fg);
+  }, [desktop, themeKey]);
   useEffect(() => {
     desktop?.setAlwaysOnTop(isPinned);
   }, [desktop, isPinned]);
@@ -204,7 +218,7 @@ export const CalculatorPage: React.FC = () => {
   // Desktop app: the OS window can't be made smaller than the calculator needs.
   const zoomFactor = calc.settings.fontScale && calc.settings.fontScale !== 1 ? calc.settings.fontScale : 1;
   useEffect(() => {
-    desktop?.setMinSize(Math.ceil(minWidth * zoomFactor) + 16, Math.ceil(minHeight * zoomFactor) + 16);
+    desktop?.setMinSize(Math.ceil(minWidth * zoomFactor), Math.ceil(minHeight * zoomFactor) + TITLE_BAR_HEIGHT);
   }, [desktop, minWidth, minHeight, zoomFactor]);
 
   // Dynamic Corner Radius Classes
@@ -338,10 +352,29 @@ export const CalculatorPage: React.FC = () => {
       style={customThemeStyle}
       className={`min-h-screen w-full transition-colors ${
         activeTheme.id === 'custom' ? 'bg-[var(--theme-bg)]' : activeTheme.classes.bg
-      } text-foreground relative flex flex-col justify-center items-center ${
-        desktop ? 'h-screen overflow-hidden p-2' : 'p-2 sm:p-4 md:p-6'
+      } text-foreground relative flex flex-col ${
+        desktop ? 'h-screen overflow-hidden' : 'justify-center items-center p-2 sm:p-4 md:p-6'
       }`}
     >
+      {/* Desktop app: our own title strip (drag to move), themed like the calculator */}
+      {desktop && (
+        <div
+          className={`shrink-0 flex items-center text-xs font-medium select-none ${
+            desktop.platform === 'darwin' ? 'justify-center' : 'pl-3'
+          }`}
+          style={
+            {
+              height: TITLE_BAR_HEIGHT,
+              backgroundColor: titleColors?.bg,
+              color: titleColors?.fg,
+              WebkitAppRegion: 'drag',
+            } as React.CSSProperties
+          }
+        >
+          <span className="opacity-70">Dockalc</span>
+        </div>
+      )}
+
       {/* CALCULATOR WINDOW: fills the app window on desktop; a resizable card in a browser */}
       <div
         ref={windowRef}
@@ -352,20 +385,25 @@ export const CalculatorPage: React.FC = () => {
           width: desktop ? '100%' : `${windowSize ? Math.max(windowSize.width, minWidth) : resolvedDefaultWidth}px`,
           minWidth: `${minWidth}px`,
           minHeight: `${minHeight}px`,
-          height: desktop ? '100%' : `${windowSize ? Math.max(windowSize.height, minHeight) : resolvedDefaultHeight}px`,
+          height: desktop ? undefined : `${windowSize ? Math.max(windowSize.height, minHeight) : resolvedDefaultHeight}px`,
           maxHeight: desktop ? undefined : 'calc(100vh - 24px)',
           ...customThemeStyle,
         }}
         className={`select-none ${fontClass} ${weightClass} theme-${activeTheme.id} ${
           isExpandedWithHistory
-            ? 'p-3.5 sm:p-4 flex flex-col gap-3 max-w-[98vw] max-h-[96vh]'
+            ? 'p-3.5 sm:p-4 flex flex-col gap-3'
             : isCompact
-            ? 'p-2.5 flex flex-col gap-2 max-w-[98vw] max-h-[96vh]'
-            : 'p-3.5 flex flex-col gap-2.5 max-w-[98vw] max-h-[96vh]'
-        } ${cornerClasses.window} border relative transition-[opacity,box-shadow,transform] duration-300 overflow-hidden ${
+            ? 'p-2.5 flex flex-col gap-2'
+            : 'p-3.5 flex flex-col gap-2.5'
+        } ${
+          // Desktop app: edge to edge, like a native app. Browser: a floating card.
+          desktop ? 'border-0 flex-1 min-h-0' : `max-w-[98vw] max-h-[96vh] ${cornerClasses.window} border`
+        } relative transition-[opacity,box-shadow,transform] duration-300 overflow-hidden ${
           calc.settings.upsideDownMode ? 'rotate-180' : ''
         } ${
-          isPinned
+          desktop
+            ? 'z-30'
+            : isPinned
             ? 'border-primary/50 shadow-2xl z-50 ring-2 ring-primary/20'
             : 'border-border/40 shadow-xl z-30'
         } ${

@@ -12,7 +12,8 @@ if (!app.requestSingleInstanceLock()) {
 
     const NORMAL_MIN = { width: 360, height: 500 };
     const COMPACT_MIN = { width: 340, height: 480 };
-    const COMPACT_SIZE = { width: 400, height: 640 };
+    const COMPACT_SIZE = { width: 400, height: 672 };
+    const TITLE_BAR_HEIGHT = 32;
 
     const backupPath = () => path.join(app.getPath('userData'), 'dockalc-backup.json');
 
@@ -85,8 +86,14 @@ if (!app.requestSingleInstanceLock()) {
             ...startBounds,
             minWidth: NORMAL_MIN.width,
             minHeight: NORMAL_MIN.height,
-            backgroundColor: '#18181b',
+            backgroundColor: '#222226',
             autoHideMenuBar: true,
+            // Draw our own title strip (like Windows Calculator) so the theme runs edge to edge.
+            // Windows/Linux keep native min/max/close buttons via the overlay; macOS keeps its traffic lights.
+            titleBarStyle: 'hidden',
+            ...(process.platform === 'darwin'
+                ? { trafficLightPosition: { x: 12, y: 10 } }
+                : { titleBarOverlay: { color: '#222226', symbolColor: '#F4F4F5', height: TITLE_BAR_HEIGHT } }),
             icon: path.join(__dirname, '../dist/Dockalc_Icon.png'),
             webPreferences: {
                 preload: path.join(__dirname, 'preload.cjs'),
@@ -149,6 +156,21 @@ if (!app.requestSingleInstanceLock()) {
         if (!win) return;
         const n = Number(value);
         win.setOpacity(Number.isFinite(n) ? Math.min(Math.max(n, 0.3), 1) : 1);
+    });
+
+    // The page tells us its theme colors so the title bar buttons match.
+    const isColor = (c) => typeof c === 'string' && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(c);
+    ipcMain.on('window:set-titlebar', (event, color, symbolColor) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || !isColor(color) || !isColor(symbolColor)) return;
+        try {
+            if (process.platform !== 'darwin') {
+                win.setTitleBarOverlay({ color, symbolColor, height: TITLE_BAR_HEIGHT });
+            }
+            win.setBackgroundColor(color);
+        } catch (err) {
+            console.warn('Dockalc title bar color not applied:', err);
+        }
     });
 
     // The page reports the smallest size its layout fits in; grow the window if it's smaller.
