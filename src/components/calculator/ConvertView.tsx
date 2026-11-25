@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useDebouncedUse } from '@/hooks/useDebouncedUse';
 import {
   Ruler,
   Scale,
@@ -48,6 +49,8 @@ interface ConvertViewProps {
   onLogHistory?: (expression: string, result: string) => void;
   playClick?: (type?: 'num' | 'op' | 'fn') => void;
   onUnlockMilestone?: (id: string) => void;
+  /** Called once per finished conversion (after the user pauses typing). */
+  onConversion?: () => void;
 }
 
 const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
@@ -196,6 +199,7 @@ export const ConvertView: React.FC<ConvertViewProps> = ({
   onLogHistory,
   playClick,
   onUnlockMilestone,
+  onConversion,
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('volume');
   const [inputValue, setInputValue] = useState<string>('1');
@@ -235,6 +239,17 @@ export const ConvertView: React.FC<ConvertViewProps> = ({
   };
   const fromUnitId = activeUnits.from;
   const toUnitId = activeUnits.to;
+
+  // Count a conversion once the user stops changing the amount or units.
+  const countConversion = useDebouncedUse(() => onConversion?.());
+  const isFirstConversionRender = useRef(true);
+  useEffect(() => {
+    if (isFirstConversionRender.current) {
+      isFirstConversionRender.current = false;
+      return;
+    }
+    countConversion();
+  }, [inputValue, fromUnitId, toUnitId, countConversion]);
 
   // Favorites state and handlers
   const [favorites, setFavorites] = useState<FavoriteConversion[]>(getInitialFavorites);

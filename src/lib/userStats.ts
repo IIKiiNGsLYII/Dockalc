@@ -216,6 +216,16 @@ export function recordCalculation(options: {
   return stats;
 }
 
+/** Counts one use of a mode (a finished calculation, function, conversion or finance calculation). */
+export function recordModeUse(mode: string): void {
+  const stats = getUserStats();
+  const m = mode.toLowerCase() as keyof UserStats['modesUsed'];
+  if (!(m in stats.modesUsed)) return;
+  stats.modesUsed[m] += 1;
+  stats.lastActiveDate = new Date().toISOString().split('T')[0];
+  saveUserStats(stats);
+}
+
 export function recordCustomKeyUse(): UserStats {
   const stats = getUserStats();
   stats.customKeyUses = (stats.customKeyUses || 0) + 1;

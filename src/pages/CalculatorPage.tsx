@@ -40,6 +40,8 @@ import { ACHIEVEMENTS_LIST } from '@/lib/numberMagic';
 import type { CalcMode, ProgrammableKeyId } from '@/types/calculator';
 import { getCornerRadiusClasses } from '@/lib/cornerRadius';
 import { toast } from 'sonner';
+import { getDesktop } from '@/lib/desktop';
+import { useDebouncedUse } from '@/hooks/useDebouncedUse';
 
 export const CalculatorPage: React.FC = () => {
   const calc = useCalculator();
@@ -157,6 +159,23 @@ export const CalculatorPage: React.FC = () => {
 
   const isPinned = calc.settings.alwaysOnTop === true;
   const isCompact = calc.settings.compactOverlay === true;
+  const windowOpacity = calc.settings.windowOpacity ?? 1;
+
+  // Convert and Finance don't use the = key, so count their uses here.
+  const trackConvertUse = () => calc.markModeUsed('convert');
+  const trackFinanceUse = useDebouncedUse(() => calc.markModeUsed('finance'));
+
+  // In the desktop app these settings drive the real OS window, not just the page.
+  const desktop = getDesktop();
+  useEffect(() => {
+    desktop?.setAlwaysOnTop(isPinned);
+  }, [desktop, isPinned]);
+  useEffect(() => {
+    desktop?.setOpacity(windowOpacity);
+  }, [desktop, windowOpacity]);
+  useEffect(() => {
+    desktop?.setCompact(isCompact);
+  }, [desktop, isCompact]);
   const isExpandedWithHistory = historyOpen && !isCompact;
 
   // Collision-free minimum scale boundaries per mode and history state
@@ -399,6 +418,18 @@ export const CalculatorPage: React.FC = () => {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1 shrink-0 ml-auto">
+            {/* Desktop app: leave compact mode */}
+            {desktop && isCompact && (
+              <button
+                type="button"
+                onClick={() => calc.updateSettings({ compactOverlay: false })}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                title="Exit compact mode"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            )}
+
             {/* Fun Gadgets & Milestones Button */}
             <button
               type="button"
@@ -419,15 +450,17 @@ export const CalculatorPage: React.FC = () => {
               <BookOpen className="w-4 h-4" />
             </button>
 
-            {/* Keyboard Shortcuts Overlay */}
-            <button
-              type="button"
-              onClick={() => setShortcutsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Keyboard Shortcuts & Programmable Hotkeys (?)"
-            >
-              <Keyboard className="w-4 h-4" />
-            </button>
+            {/* Keyboard Shortcuts Overlay (hidden in compact mode to save room; ? still opens it) */}
+            {!(desktop && isCompact) && (
+              <button
+                type="button"
+                onClick={() => setShortcutsModalOpen(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                title="Keyboard Shortcuts & Programmable Hotkeys (?)"
+              >
+                <Keyboard className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Single Settings Button */}
             <button
@@ -444,11 +477,11 @@ export const CalculatorPage: React.FC = () => {
         {/* PHONE MAIN BODY: DISPLAY & KEYPAD */}
         <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-2.5 pb-1 gap-1 overflow-hidden max-w-md mx-auto w-full justify-between">
           {calc.mode === 'finance' ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full">
+            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full" onChange={trackFinanceUse}>
               <FinanceView
                 theme={activeTheme}
                 settings={calc.settings}
-                onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note)}
+                onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note, false)}
                 playClick={calc.playClick}
               />
             </div>
@@ -457,7 +490,8 @@ export const CalculatorPage: React.FC = () => {
               <ConvertView
                 theme={activeTheme}
                 settings={calc.settings}
-                onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr)}
+                onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr, false)}
+                  onConversion={trackConvertUse}
                 playClick={calc.playClick}
                 onUnlockMilestone={calc.unlockAchievement}
               />
@@ -842,8 +876,34 @@ export const CalculatorPage: React.FC = () => {
               </button>
             )}
 
-            {/* Desktop Windowed Toggle (For Desktop screens) */}
-            {viewport.width >= 1024 && (
+            {/* Desktop app: real window controls (pin on top, compact) */}
+            {desktop && (
+              <>
+                <button
+                  type="button"
+                  onClick={toggleAlwaysOnTop}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    isPinned
+                      ? 'bg-primary/20 text-primary font-bold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                  title={isPinned ? 'Unpin window (Alt+P)' : 'Keep window on top (Alt+P)'}
+                >
+                  <Pin className={`w-4 h-4 ${isPinned ? 'rotate-45' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => calc.updateSettings({ compactOverlay: true })}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                  title="Compact mode (display and keypad only)"
+                >
+                  <Minimize2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+
+            {/* Desktop Windowed Toggle (For Desktop screens, browser only) */}
+            {!desktop && viewport.width >= 1024 && (
               <button
                 type="button"
                 onClick={() => calc.updateSettings({ deviceLayout: 'desktop' })}
@@ -907,11 +967,11 @@ export const CalculatorPage: React.FC = () => {
             className="h-full flex flex-col p-2 sm:p-3 gap-1.5 sm:gap-2 overflow-hidden transition-[width] duration-75"
           >
             {calc.mode === 'finance' ? (
-              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto max-w-xl mx-auto w-full p-1 sm:p-2">
+              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto max-w-xl mx-auto w-full p-1 sm:p-2" onChange={trackFinanceUse}>
                 <FinanceView
                   theme={activeTheme}
                   settings={calc.settings}
-                  onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note)}
+                  onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note, false)}
                   playClick={calc.playClick}
                 />
               </div>
@@ -920,7 +980,8 @@ export const CalculatorPage: React.FC = () => {
                 <ConvertView
                   theme={activeTheme}
                   settings={calc.settings}
-                  onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr)}
+                  onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr, false)}
+                  onConversion={trackConvertUse}
                   playClick={calc.playClick}
                   onUnlockMilestone={calc.unlockAchievement}
                 />
@@ -1245,7 +1306,7 @@ export const CalculatorPage: React.FC = () => {
         ref={windowRef}
         data-theme={activeTheme.id}
         style={{
-          opacity: calc.settings.windowOpacity ?? 1,
+          opacity: desktop ? 1 : windowOpacity,
           zoom: calc.settings.fontScale && calc.settings.fontScale !== 1 ? calc.settings.fontScale : undefined,
           width: `${windowSize ? Math.max(windowSize.width, minWidth) : resolvedDefaultWidth}px`,
           minWidth: `${minWidth}px`,
@@ -1447,11 +1508,11 @@ export const CalculatorPage: React.FC = () => {
             className="flex flex-col gap-2 sm:gap-2.5 h-full min-h-0 flex-1 min-w-[280px] transition-[width,flex-basis] duration-100"
           >
             {calc.mode === 'finance' ? (
-              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full p-2">
+              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full p-2" onChange={trackFinanceUse}>
                 <FinanceView
                   theme={activeTheme}
                   settings={calc.settings}
-                  onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note)}
+                  onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note, false)}
                   playClick={calc.playClick}
                 />
               </div>
@@ -1460,7 +1521,8 @@ export const CalculatorPage: React.FC = () => {
                 <ConvertView
                   theme={activeTheme}
                   settings={calc.settings}
-                  onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr)}
+                  onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr, false)}
+                  onConversion={trackConvertUse}
                   playClick={calc.playClick}
                   onUnlockMilestone={calc.unlockAchievement}
                 />

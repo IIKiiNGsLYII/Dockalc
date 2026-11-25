@@ -402,7 +402,7 @@ export const Display: React.FC<DisplayProps> = ({
         </div>
 
         {/* Exact Fraction & Radical Simplification Strip */}
-        {(exactFraction || exactRadical) && (
+        {settings.showExactFraction === true && (exactFraction || exactRadical) && (
           <div className={`flex items-center justify-between gap-1.5 py-1 px-2.5 my-1 rounded-lg border text-[11px] font-mono select-none transition-all ${
             isNordic
               ? 'bg-[#E2E8F0]/90 border-[#CBD5E1] text-[#0F172A] shadow-xs'

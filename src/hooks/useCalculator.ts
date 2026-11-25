@@ -32,11 +32,13 @@ import {
   checkCalculationMilestones,
   checkCustomKeyMilestones,
   checkWonderAndModeMilestones,
+  checkModeMilestones,
   checkEpicCompletionistMilestone,
   type AchievementItem,
 } from '@/lib/numberMagic';
 import {
   recordCalculation,
+  recordModeUse,
   recordDigitPress,
   recordClearPress,
   recordBackspacePress,
@@ -99,7 +101,7 @@ const DEFAULT_SETTINGS: CalculatorSettings = {
   displayFontScale: 1.0,
   cornerRadius: 'extra',
   cornerRadiusPx: 16,
-  soundEnabled: true,
+  soundEnabled: false,
   soundVolume: 0.35,
   vibrateEnabled: true,
   thousandsSeparator: true,
@@ -115,6 +117,7 @@ const DEFAULT_SETTINGS: CalculatorSettings = {
   alwaysOnTop: false,
   windowOpacity: 1,
   compactOverlay: false,
+  showExactFraction: false,
   tabletRatio: 65,
   deviceLayout: 'auto',
   confettiEnabled: false,
@@ -493,7 +496,16 @@ export function useCalculator() {
 
   // Record history item
   const recordHistory = useCallback(
-    (expr: string, res: string, calcMode: CalcMode, currentBase?: NumberBase, runningEq?: string) => {
+    (
+      expr: string,
+      res: string,
+      calcMode: CalcMode,
+      currentBase?: NumberBase,
+      runningEq?: string,
+      countModeUse = true
+    ) => {
+      // Equals is counted by recordCalculation; Convert/Finance count their own uses.
+      if (countModeUse) recordModeUse(calcMode);
       const newItem: HistoryItem = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         timestamp: Date.now(),
@@ -882,7 +894,7 @@ export function useCalculator() {
 
       setRunningEquation(`${eqToRecord} =`);
       setHasEvaluated(true);
-      recordHistory(fullExpr, resultStr, mode, mode === 'programmer' ? base : undefined, eqToRecord);
+      recordHistory(fullExpr, resultStr, mode, mode === 'programmer' ? base : undefined, eqToRecord, false);
       setPreviousValue(null);
       setPendingOp(null);
       setIsNewInput(true);
@@ -1643,6 +1655,26 @@ export function useCalculator() {
     return undefined;
   }, [settings.theme, settings.customTheme]);
 
+
+  // Convert and Finance never press "=", so they report their uses here:
+  // counts the mode in Statistics and unlocks the mode badges.
+  const markModeUsed = useCallback(
+    (m: CalcMode) => {
+      recordModeUse(m);
+      if (m === 'convert') recordConversion();
+      const nextUsed = usedModes.includes(m) ? usedModes : [...usedModes, m];
+      if (nextUsed !== usedModes) {
+        setUsedModes(nextUsed);
+        try {
+          localStorage.setItem('dockcalc_used_modes', JSON.stringify(nextUsed));
+        } catch {
+          // ignore storage error
+        }
+      }
+      checkModeMilestones(m, nextUsed, unlockAchievement);
+    },
+    [usedModes, unlockAchievement]
+  );
   return {
     mode,
     setMode,
@@ -1699,6 +1731,7 @@ export function useCalculator() {
     updateHistoryItemNote,
     exportHistory,
     recordHistory,
+    markModeUsed,
     recordClipboardCopy,
     checkDailyStreak,
     // Custom Programmable Button
