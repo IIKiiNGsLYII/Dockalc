@@ -1893,7 +1893,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-[11px] ${themeClasses.muted} font-mono`}>45%</span>
+                  <span className={`text-[11px] ${themeClasses.muted} font-mono`}>50%</span>
                   <input
                     type="range"
                     min="0.5"
