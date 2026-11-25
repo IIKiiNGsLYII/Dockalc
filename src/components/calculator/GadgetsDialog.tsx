@@ -693,7 +693,7 @@ export const GadgetsDialog: React.FC<GadgetsDialogProps> = ({
             <MentalMathSprint
               onUnlockMilestone={triggerUnlock}
               onPlaySound={(type) => {
-                if (settings?.soundEnabled ?? true) {
+                if (settings?.soundEnabled ?? false) {
                   soundFX.playKeyClick(settings?.soundVolume ?? 0.2, type, 'piano');
                 }
               }}

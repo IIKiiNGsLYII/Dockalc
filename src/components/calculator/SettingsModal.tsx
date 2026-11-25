@@ -59,6 +59,7 @@ import {
   type CalculatorTheme,
 } from '@/types/calculator';
 import { toast } from 'sonner';
+import { isDesktopApp } from '@/lib/desktop';
 import dockalcLogo from '@/assets/Dockalc_Icon.png';
 
 interface SettingsModalProps {
@@ -665,6 +666,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className={`flex items-center justify-between pt-2 border-t ${themeClasses.border}`}>
                   <div>
+                    <div className={`text-xs font-semibold ${themeClasses.heading}`}>Fraction Helper</div>
+                    <div className={`text-[11px] ${themeClasses.muted}`}>Show the exact fraction / radical strip under results</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.showExactFraction === true}
+                    onChange={(e) => onUpdateSettings({ showExactFraction: e.target.checked })}
+                    className="w-4 h-4 accent-primary rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className={`flex items-center justify-between pt-2 border-t ${themeClasses.border}`}>
+                  <div>
                     <div className={`text-xs font-semibold ${themeClasses.heading}`}>Equation Bar</div>
                     <div className={`text-[11px] ${themeClasses.muted}`}>Show running equation bar on calculator display</div>
                   </div>
@@ -710,8 +724,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
 
-              {/* Window Layering & Desktop Controls (Desktop / Tablet only) */}
-              {!isPhone && (
+              {/* Window Layering & Desktop Controls (Desktop / Tablet, and always in the desktop app) */}
+              {(!isPhone || isDesktopApp()) && (
                 <>
                   <div className={`p-3.5 rounded-xl border space-y-3 ${themeClasses.card}`}>
                     <div className={`text-xs font-bold flex items-center gap-1.5 ${themeClasses.heading}`}>
@@ -765,7 +779,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <input
                         type="range"
-                        min="0.75"
+                        min="0.5"
                         max="1"
                         step="0.05"
                         value={settings.windowOpacity ?? 1}
@@ -775,7 +789,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Dedicated Custom Window Sizing & Boundaries */}
+                  {/* Dedicated Custom Window Sizing & Boundaries */} {/* Browser only: the desktop app window itself is the calculator window */}
+                  {!isDesktopApp() && (
                   <div className={`p-3.5 rounded-xl border space-y-3 ${themeClasses.card}`}>
                     <div className="flex items-center justify-between">
                       <div className={`text-xs font-bold flex items-center gap-1.5 ${themeClasses.heading}`}>
@@ -895,6 +910,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
+                  )}
                 </>
               )}
             </div>
@@ -1930,70 +1946,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Device Layout Mode Preference */}
-              <div className={`p-3.5 rounded-xl border space-y-2.5 ${themeClasses.card}`}>
-                <div className={`text-xs font-bold flex items-center justify-between ${themeClasses.heading}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Tablet className={`w-3.5 h-3.5 ${themeClasses.accent}`} />
-                    <span>Device Layout Mode</span>
-                  </div>
-                  <span className={`text-xs font-mono font-bold capitalize px-2 py-0.5 rounded-md border ${themeClasses.accent} ${themeClasses.subCard}`}>
-                    {settings.deviceLayout || 'auto'}
-                  </span>
-                </div>
-                <p className={`text-[11px] ${themeClasses.muted} leading-relaxed`}>
-                  Choose between responsive auto-detection, phone full-screen, tablet side-by-side, or desktop windowed layout.
-                </p>
-
-                <div className="grid grid-cols-4 gap-1.5 text-xs">
-                  {[
-                    { id: 'auto', label: 'Auto' },
-                    { id: 'phone', label: 'Phone' },
-                    { id: 'tablet', label: 'Tablet' },
-                    { id: 'desktop', label: isPhone ? 'Window (Desktop)' : 'Window' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      disabled={opt.id === 'desktop' && isPhone}
-                      onClick={() => {
-                        if (opt.id === 'desktop' && isPhone) {
-                          toast.info('Windowed layout is supported on desktop screens only');
-                          return;
-                        }
-                        onUpdateSettings({ deviceLayout: opt.id as 'auto' | 'phone' | 'tablet' | 'desktop' });
-                      }}
-                      className={`py-1.5 px-2 rounded-lg font-medium border transition-colors cursor-pointer text-center ${
-                        opt.id === 'desktop' && isPhone
-                          ? 'opacity-40 cursor-not-allowed border-border/40 text-muted-foreground'
-                          : (settings.deviceLayout || 'auto') === opt.id
-                          ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                          : `${themeClasses.subCard} ${themeClasses.muted} hover:text-foreground`
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Screen Ratio (Calculator vs History) for Tablets & Side-by-Side */}
+              {/* Calculator vs History width */}
               <div className={`p-3.5 rounded-xl border space-y-3 ${themeClasses.card}`}>
                 <div className="flex items-center justify-between">
                   <div className={`flex items-center gap-2 text-xs font-bold ${themeClasses.heading}`}>
                     <Tablet className={`w-3.5 h-3.5 ${themeClasses.accent}`} />
-                    <span>Screen Ratio (Calculator vs History)</span>
+                    <span>Calculator vs History Width</span>
                   </div>
                   <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-md border ${themeClasses.accent} ${themeClasses.subCard}`}>
                     {settings.tabletRatio || 65}% : {100 - (settings.tabletRatio || 65)}%
                   </span>
                 </div>
                 <p className={`text-[11px] ${themeClasses.muted} leading-relaxed`}>
-                  Controls the width proportion between the calculator and side history panel on tablets and landscape screens.
+                  How much of the window the calculator takes when History or Paper Tape is open.
                 </p>
 
                 <div className="flex items-center gap-3">
-                  <span className={`text-[11px] ${themeClasses.muted} font-mono`}>50%</span>
+                  <span className={`text-[11px] ${themeClasses.muted} font-mono`}>45%</span>
                   <input
                     type="range"
                     min="45"
@@ -2443,11 +2412,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* CATEGORY 6: USER STATISTICS & SYSTEM ANALYTICS            */}
           {/* ========================================================= */}
           {activeCategory === 'stats' && (
-            <UserStatisticsTab
-              themeClasses={themeClasses}
-              unlockedMilestonesCount={settings.unlockedAchievements?.length || 0}
-              onOpenMilestones={onOpenMilestones}
-            />
+              <UserStatisticsTab
+                themeClasses={themeClasses}
+                unlockedMilestonesCount={settings.unlockedAchievements?.length || 0}
+                onOpenMilestones={onOpenMilestones}
+              />
           )}
         </div>
       </DialogContent>

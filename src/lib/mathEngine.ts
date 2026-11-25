@@ -241,12 +241,14 @@ export function bitShift(
   const mask = getBitMask(width);
   const unsigned = val & mask;
   const shift = amount % BigInt(width);
+  // Plain shifts by the full width (or more) clear every bit; rotations wrap around.
+  const fullShift = amount >= BigInt(width);
 
   switch (type) {
     case 'Lsh':
-      return (unsigned << shift) & mask;
+      return fullShift ? 0n : (unsigned << amount) & mask;
     case 'Rsh':
-      return unsigned >> shift;
+      return fullShift ? 0n : unsigned >> amount;
     case 'RoL':
       return ((unsigned << shift) | (unsigned >> (BigInt(width) - shift))) & mask;
     case 'RoR':

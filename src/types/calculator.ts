@@ -118,6 +118,7 @@ export interface CalculatorSettings {
   alwaysOnTop: boolean;
   windowOpacity: number;
   compactOverlay: boolean;
+  showExactFraction?: boolean; // fraction / radical strip under the display
   defaultMode?: CalcMode;
   tabletRatio?: number; // 50 to 80 (percentage for calculator column on tablets/side-by-side)
   deviceLayout?: DeviceLayoutMode;

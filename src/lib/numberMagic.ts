@@ -521,7 +521,7 @@ export const ACHIEVEMENTS_LIST: AchievementItem[] = [
   {
     id: 'all-rounder',
     title: 'Mode All-Rounder',
-    description: 'Master all 6 calculation modes in your Dockalc workspace',
+    description: 'Master all 5 calculation modes in your Dockalc workspace',
     icon: '🌐🎖️',
     category: 'mode',
     tier: 'gold',
@@ -1247,6 +1247,17 @@ function isPowerOfTwo(n: number): boolean {
 }
 
 // Evaluate wonder, numeric magic, and mode milestones
+const ALL_MODES = ['standard', 'scientific', 'programmer', 'finance', 'convert'];
+
+/** Mode badges: Financial Planner, Global Trader, Polymath (3 modes) and All-Rounder (all 5). */
+export function checkModeMilestones(mode: string, usedModes: string[], unlock: (id: string) => void): void {
+  if (mode === 'finance') unlock('financial-planner');
+  if (mode === 'convert') unlock('global-trader');
+  const distinct = ALL_MODES.filter((m) => usedModes.includes(m));
+  if (distinct.length >= 3) unlock('polymath');
+  if (distinct.length === ALL_MODES.length) unlock('all-rounder');
+}
+
 export function checkWonderAndModeMilestones(
   resultStr: string,
   mode: string,
@@ -1325,14 +1336,8 @@ export function checkWonderAndModeMilestones(
   if (mode === 'standard') unlock('standard-solver');
   if (mode === 'scientific') unlock('scientific-scholar');
   if (mode === 'programmer') unlock('bitwise-wizard');
-  if (mode === 'finance') unlock('financial-planner');
-  if (mode === 'convert') unlock('global-trader');
   if (rpnMode) unlock('rpn-prodigy');
-
-  if (usedModes.length >= 3) unlock('polymath');
-  if (['standard', 'scientific', 'programmer', 'finance', 'convert', 'matrix'].every(m => usedModes.includes(m))) {
-    unlock('all-rounder');
-  }
+  checkModeMilestones(mode, usedModes, unlock);
 
   // 4. Secret Number Lore & Behavior Quirks
   if (resultStr === '1729' || Math.abs(numVal - 1729) < 1e-9) unlock('taxi-1729');

@@ -1,3 +1,9 @@
+/** Today's date (YYYY-MM-DD) in the user's own time zone. */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // Persistent User Statistics Tracking for Dockcalc
 export interface UserStats {
   totalCalculations: number;
@@ -123,8 +129,8 @@ const DEFAULT_STATS: UserStats = {
     fibonaccisDiscovered: 0,
     upsideDownUsed: 0,
   },
-  firstSessionDate: new Date().toISOString().split('T')[0],
-  lastActiveDate: new Date().toISOString().split('T')[0],
+  firstSessionDate: localToday(),
+  lastActiveDate: localToday(),
 };
 
 export function getUserStats(): UserStats {
@@ -165,7 +171,7 @@ export function recordCalculation(options: {
   const stats = getUserStats();
   stats.totalCalculations += 1;
   stats.totalEqualsPressed += 1;
-  stats.lastActiveDate = new Date().toISOString().split('T')[0];
+  stats.lastActiveDate = localToday();
 
   // Record mode usage
   if (options.mode) {
@@ -214,6 +220,16 @@ export function recordCalculation(options: {
 
   saveUserStats(stats);
   return stats;
+}
+
+/** Counts one use of a mode (a finished calculation, function, conversion or finance calculation). */
+export function recordModeUse(mode: string): void {
+  const stats = getUserStats();
+  const m = mode.toLowerCase() as keyof UserStats['modesUsed'];
+  if (!(m in stats.modesUsed)) return;
+  stats.modesUsed[m] += 1;
+  stats.lastActiveDate = localToday();
+  saveUserStats(stats);
 }
 
 export function recordCustomKeyUse(): UserStats {
@@ -299,8 +315,8 @@ export function recordEasterEgg(type: keyof UserStats['easterEggsFound']): void 
 export function resetUserStats(): UserStats {
   const resetState = {
     ...DEFAULT_STATS,
-    firstSessionDate: new Date().toISOString().split('T')[0],
-    lastActiveDate: new Date().toISOString().split('T')[0],
+    firstSessionDate: localToday(),
+    lastActiveDate: localToday(),
   };
   saveUserStats(resetState);
   return resetState;
