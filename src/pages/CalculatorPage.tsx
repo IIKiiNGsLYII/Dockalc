@@ -161,6 +161,28 @@ export const CalculatorPage: React.FC = () => {
   const isCompact = calc.settings.compactOverlay === true;
   const windowOpacity = calc.settings.windowOpacity ?? 1;
 
+  // Ctrl+V / Cmd+V pastes a number into the calculator (unless you're typing in a field).
+  const pasteValueRef = useRef(calc.pasteValue);
+  pasteValueRef.current = calc.pasteValue;
+  const calcModeRef = useRef(calc.mode);
+  calcModeRef.current = calc.mode;
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (calcModeRef.current === 'convert' || calcModeRef.current === 'finance') return;
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (!text) return;
+      e.preventDefault();
+      if (!pasteValueRef.current(text)) {
+        toast.error("Clipboard doesn't contain a number", { description: text.length > 40 ? `${text.slice(0, 40)}…` : text });
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
   // Convert and Finance don't use the = key, so count their uses here.
   const trackConvertUse = () => calc.markModeUsed('convert');
   const trackFinanceUse = useDebouncedUse(() => calc.markModeUsed('finance'));

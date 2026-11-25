@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -16,6 +16,61 @@ if (!app.requestSingleInstanceLock()) {
 
     const backupPath = () => path.join(app.getPath('userData'), 'dockalc-backup.json');
 
+    // ---- Remember window size and position between launches -------------
+    // { normal: bounds, compact: bounds | null, maximized: bool }
+    const statePath = () => path.join(app.getPath('userData'), 'window-state.json');
+    let windowState = { normal: null, compact: null, maximized: false };
+    let saveTimer = null;
+
+    function isValidBounds(b) {
+        if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return false;
+        // Must overlap a connected screen, so a window from an unplugged monitor isn't lost off-screen.
+        return screen.getAllDisplays().some(({ workArea: a }) =>
+            b.x + 80 <= a.x + a.width && b.x + b.width - 80 >= a.x && b.y >= a.y - 20 && b.y + 40 <= a.y + a.height
+        );
+    }
+
+    function loadWindowState() {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(statePath(), 'utf8'));
+            windowState = {
+                normal: isValidBounds(parsed.normal) ? parsed.normal : null,
+                compact: isValidBounds(parsed.compact) ? parsed.compact : null,
+                maximized: parsed.maximized === true,
+            };
+        } catch {
+            // first launch or unreadable file: use defaults
+        }
+    }
+
+    function captureWindowState() {
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+        if (boundsBeforeCompact) {
+            if (!mainWindow.isMaximized()) windowState.compact = mainWindow.getBounds();
+            windowState.normal = boundsBeforeCompact;
+        } else {
+            windowState.normal = mainWindow.getNormalBounds();
+            windowState.maximized = mainWindow.isMaximized();
+        }
+    }
+
+    function saveWindowStateNow() {
+        captureWindowState();
+        try {
+            fs.writeFileSync(statePath(), JSON.stringify(windowState));
+        } catch (err) {
+            console.warn('Dockalc window state not saved:', err);
+        }
+    }
+
+    function scheduleWindowStateSave() {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            saveTimer = null;
+            saveWindowStateNow();
+        }, 500);
+    }
+
     function showMainWindow() {
         if (!mainWindow) return;
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -24,9 +79,10 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     function createWindow() {
+        loadWindowState();
+        const startBounds = windowState.normal || { width: 1000, height: 700 };
         mainWindow = new BrowserWindow({
-            width: 1000,
-            height: 700,
+            ...startBounds,
             minWidth: NORMAL_MIN.width,
             minHeight: NORMAL_MIN.height,
             backgroundColor: '#18181b',
@@ -38,6 +94,15 @@ if (!app.requestSingleInstanceLock()) {
                 nodeIntegration: false,
                 sandbox: true,
             },
+        });
+
+        if (windowState.maximized) mainWindow.maximize();
+        for (const evt of ['resize', 'move', 'maximize', 'unmaximize']) {
+            mainWindow.on(evt, scheduleWindowStateSave);
+        }
+        mainWindow.on('close', () => {
+            if (saveTimer) clearTimeout(saveTimer);
+            saveWindowStateNow();
         });
 
         // Dev mode: load the Vite server. Otherwise load the built files.
@@ -95,10 +160,13 @@ if (!app.requestSingleInstanceLock()) {
             if (win.isFullScreen()) win.setFullScreen(false);
             boundsBeforeCompact = win.getBounds();
             win.setMinimumSize(COMPACT_MIN.width, COMPACT_MIN.height);
-            win.setSize(COMPACT_SIZE.width, COMPACT_SIZE.height, true);
+            // Reopen compact mode where you last left it, or at the default size.
+            if (windowState.compact) win.setBounds(windowState.compact, true);
+            else win.setSize(COMPACT_SIZE.width, COMPACT_SIZE.height, true);
         } else {
             win.setMinimumSize(NORMAL_MIN.width, NORMAL_MIN.height);
             if (boundsBeforeCompact) {
+                if (!win.isMaximized()) windowState.compact = win.getBounds();
                 win.setBounds(boundsBeforeCompact, true);
                 boundsBeforeCompact = null;
             }

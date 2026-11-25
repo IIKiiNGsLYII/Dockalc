@@ -61,6 +61,14 @@ const STORAGE_KEY_MEMORY = 'dockalc_calculator_memory_v1';
 const ERROR_DISPLAYS = new Set(['Error', 'Cannot divide by zero', 'Invalid Input', 'Overflow', 'NaN', 'Infinity', '-Infinity']);
 const isErrorDisplay = (val: string) => ERROR_DISPLAYS.has(val);
 
+// Order of operations for Scientific mode: higher binds tighter.
+const opPrecedence = (op: string): number => {
+  if (['y^x', '^', 'x√y', 'yroot', 'EE'].includes(op)) return 3;
+  if (['×', '*', '÷', '/', '%', 'MOD'].includes(op)) return 2;
+  return 1;
+};
+const isRightAssociative = (op: string) => ['y^x', '^', 'x√y', 'yroot'].includes(op);
+
 /** Today's date (YYYY-MM-DD) in the user's own time zone, not UTC. */
 const localDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -197,7 +205,14 @@ export function useCalculator() {
   // Scientific controls
   const [angleUnit, setAngleUnit] = useState<AngleUnit>('DEG');
   const [is2nd, setIs2nd] = useState<boolean>(false);
-  const [parenthesisStack, setParenthesisStack] = useState<{ prev: string | null; op: string | null }[]>([]);
+  // Open brackets, plus "implicit" frames that hold a lower-priority operation
+  // while a higher-priority one is worked out (Scientific order of operations).
+  const [parenthesisStack, setParenthesisStack] = useState<{ prev: string | null; op: string | null; implicit?: boolean }[]>([]);
+  // True when the number on screen was produced for the pending operation (by a
+  // function, constant, bracket, memory recall or paste) rather than left over.
+  const operandReadyRef = useRef(false);
+  // Last "= operation" so pressing = again repeats it (5 + 2 = = → 9).
+  const lastRepeatRef = useRef<{ op: string; operand: string } | null>(null);
 
   // Programmer controls
   const [base, setBaseState] = useState<NumberBase>('DEC');
@@ -642,6 +657,8 @@ export function useCalculator() {
     setIsNewInput(true);
     setHasEvaluated(false);
     if (all) {
+      lastRepeatRef.current = null;
+      operandReadyRef.current = false;
       setExpression('');
       setRunningEquation('');
       setPreviousValue(null);
@@ -751,6 +768,15 @@ export function useCalculator() {
     return res & mask;
   }, []);
 
+  // a op b in the current mode, as display text
+  const computeBinary = useCallback(
+    (a: string, op: string, b: string): string =>
+      mode === 'programmer'
+        ? formatBaseBigInt(executeProgrammerMath(parseBaseString(a, base), parseBaseString(b, base), op, bitWidth), base, bitWidth)
+        : executeMath(Number(a), Number(b), op).toString(),
+    [base, bitWidth, executeMath, executeProgrammerMath, mode]
+  );
+
   // Set binary operator (+, -, *, /, etc.)
   const setOperator = useCallback((op: string) => {
     playClick('op');
@@ -791,35 +817,49 @@ export function useCalculator() {
     }
 
     // Standard Algebraic mode
-    if (pendingOp && !isNewInput && previousValue !== null) {
-      // Chain calculation
-      try {
-        let resultStr = '';
-        if (mode === 'programmer') {
-          const prevBig = parseBaseString(previousValue, base);
-          const currBig = parseBaseString(display, base);
-          const calcBig = executeProgrammerMath(prevBig, currBig, pendingOp, bitWidth);
-          resultStr = formatBaseBigInt(calcBig, base, bitWidth);
-        } else {
-          const prevNum = Number(previousValue);
-          const currNum = Number(display);
-          const calcNum = executeMath(prevNum, currNum, pendingOp);
-          resultStr = calcNum.toString();
+    lastRepeatRef.current = null;
+    const operandReady = !isNewInput || operandReadyRef.current;
+    operandReadyRef.current = false;
+    if (pendingOp && operandReady && previousValue !== null) {
+      // Scientific mode: hold "2 +" aside while "3 × 4" is worked out first.
+      const usePrecedence = mode === 'scientific';
+      const bindsTighter =
+        opPrecedence(op) > opPrecedence(pendingOp) ||
+        (opPrecedence(op) === opPrecedence(pendingOp) && isRightAssociative(op) && isRightAssociative(pendingOp));
+      if (usePrecedence && bindsTighter) {
+        setParenthesisStack((prev) => [...prev, { prev: previousValue, op: pendingOp, implicit: true }]);
+        setPreviousValue(display);
+        setExpression((prev) => `${prev}${display} ${op} `);
+      } else {
+        // Chain calculation, then finish any held-aside operations that don't bind tighter than op
+        try {
+          let resultStr = computeBinary(previousValue, pendingOp, display);
+          if (usePrecedence) {
+            const stack = [...parenthesisStack];
+            while (stack.length > 0) {
+              const top = stack[stack.length - 1];
+              if (!top.implicit || !top.op || top.prev === null || opPrecedence(top.op) < opPrecedence(op)) break;
+              resultStr = computeBinary(top.prev, top.op, resultStr);
+              stack.pop();
+            }
+            if (stack.length !== parenthesisStack.length) setParenthesisStack(stack);
+          }
+          setDisplay(resultStr);
+          setPreviousValue(resultStr);
+          setExpression(`${resultStr} ${op} `);
+        } catch (err: unknown) {
+          setDisplay(err instanceof Error ? err.message : 'Error');
+          setExpression('');
+          setPreviousValue(null);
+          setPendingOp(null);
+          setParenthesisStack([]);
+          setIsNewInput(true);
+          return;
         }
-        setDisplay(resultStr);
-        setPreviousValue(resultStr);
-        setExpression(`${resultStr} ${op} `);
-      } catch (err: unknown) {
-        setDisplay(err instanceof Error ? err.message : 'Error');
-        setExpression('');
-        setPreviousValue(null);
-        setPendingOp(null);
-        setIsNewInput(true);
-        return;
       }
     } else {
       setPreviousValue(display);
-      setExpression(`${display} ${op} `);
+      setExpression((prev) => (pendingOp && previousValue !== null && !operandReady ? prev.replace(/\S+\s*$/, `${op} `) : `${display} ${op} `));
     }
 
     setPendingOp(op);
@@ -836,7 +876,7 @@ export function useCalculator() {
       }
       return `${trimmed} ${op} `;
     });
-  }, [base, bitWidth, display, executeMath, executeProgrammerMath, isNewInput, mode, pendingOp, playClick, previousValue, recordHistory, rpnStack, settings.rpnMode]);
+  }, [base, bitWidth, computeBinary, display, executeMath, executeProgrammerMath, isNewInput, mode, parenthesisStack, pendingOp, playClick, previousValue, recordHistory, rpnStack, settings.rpnMode]);
 
   // Equals (=) execution
   const calculateEquals = useCallback(() => {
@@ -885,9 +925,17 @@ export function useCalculator() {
       }
     }
 
+    // Pressing = again repeats the last operation (5 + 2 = = → 9).
+    if ((!po || pv === null) && lastRepeatRef.current) {
+      pv = dv;
+      po = lastRepeatRef.current.op;
+      dv = lastRepeatRef.current.operand;
+    }
+
     if (!po || pv === null) {
       return;
     }
+    operandReadyRef.current = false;
 
     try {
       let resultStr = '';
@@ -945,6 +993,7 @@ export function useCalculator() {
       setRunningEquation(`${eqToRecord} =`);
       setHasEvaluated(true);
       recordHistory(fullExpr, resultStr, mode, mode === 'programmer' ? base : undefined, eqToRecord, false);
+      lastRepeatRef.current = { op: po, operand: dv };
       setPreviousValue(null);
       setPendingOp(null);
       setIsNewInput(true);
@@ -1117,6 +1166,7 @@ export function useCalculator() {
     // Negate flips the sign of the number being typed, so you can keep typing (5 ± 3 → -53).
     if (fn === '+/-' && mode !== 'programmer') {
       setDisplay((prev) => (prev === '0' ? prev : prev.startsWith('-') ? prev.slice(1) : `-${prev}`));
+      operandReadyRef.current = true;
       return;
     }
 
@@ -1148,6 +1198,7 @@ export function useCalculator() {
         const resStr = formatBaseBigInt(resBig, base, bitWidth);
         setDisplay(resStr);
         setIsNewInput(true);
+        operandReadyRef.current = true;
         recordHistory(`${fn}(${display})`, resStr, mode, base);
       } catch {
         setDisplay('Error');
@@ -1285,6 +1336,7 @@ export function useCalculator() {
       setIsNewInput(true);
       const unaryEq = runningEquation ? `${runningEquation} [${fn}]` : label;
       recordHistory(label, resStr, mode, undefined, unaryEq);
+      operandReadyRef.current = true;
     } catch (err: unknown) {
       setDisplay(err instanceof Error ? err.message : 'Error');
       setIsNewInput(true);
@@ -1308,55 +1360,90 @@ export function useCalculator() {
     }
     setDisplay(val.toString());
     setIsNewInput(true);
+    operandReadyRef.current = true;
   }, [playClick]);
 
   // Parentheses handling
   const handleParenthesis = useCallback((p: '(' | ')') => {
     playClick('op');
+    if (isErrorDisplay(display)) return;
+    lastRepeatRef.current = null;
     if (p === '(') {
       setParenthesisStack((prev) => [...prev, { prev: previousValue, op: pendingOp }]);
       setPreviousValue(null);
       setPendingOp(null);
       setExpression((prev) => `${prev}( `);
       setIsNewInput(true);
-    } else {
-      if (parenthesisStack.length === 0) return;
-      // Close parenthesis: evaluate inside
-      if (pendingOp && previousValue !== null) {
-        try {
-          const resultStr =
-            mode === 'programmer'
-              ? formatBaseBigInt(
-                  executeProgrammerMath(parseBaseString(previousValue, base), parseBaseString(display, base), pendingOp, bitWidth),
-                  base,
-                  bitWidth
-                )
-              : executeMath(Number(previousValue), Number(display), pendingOp).toString();
-          const top = parenthesisStack[parenthesisStack.length - 1];
-          setParenthesisStack((prev) => prev.slice(0, -1));
-          setPreviousValue(top.prev);
-          setPendingOp(top.op);
-          setDisplay(resultStr);
-          setExpression((prev) => `${prev}${display} ) `);
-          setIsNewInput(true);
-        } catch {
-          setDisplay('Error');
-        }
-      } else {
-        const top = parenthesisStack[parenthesisStack.length - 1];
-        setParenthesisStack((prev) => prev.slice(0, -1));
-        setPreviousValue(top.prev);
-        setPendingOp(top.op);
-        setExpression((prev) => `${prev}${display} ) `);
-        setIsNewInput(true);
-      }
+      operandReadyRef.current = false;
+      return;
     }
-  }, [base, bitWidth, display, executeMath, executeProgrammerMath, mode, parenthesisStack, pendingOp, playClick, previousValue]);
+
+    // Close: finish everything inside the innermost open bracket.
+    const openIdx = parenthesisStack.map((f) => !f.implicit).lastIndexOf(true);
+    if (openIdx === -1) return;
+    try {
+      let resultStr = display;
+      if (pendingOp && previousValue !== null) resultStr = computeBinary(previousValue, pendingOp, resultStr);
+      for (let i = parenthesisStack.length - 1; i > openIdx; i--) {
+        const f = parenthesisStack[i];
+        if (f.op && f.prev !== null) resultStr = computeBinary(f.prev, f.op, resultStr);
+      }
+      const open = parenthesisStack[openIdx];
+      setParenthesisStack((prev) => prev.slice(0, openIdx));
+      setPreviousValue(open.prev);
+      setPendingOp(open.op);
+      setDisplay(resultStr);
+      setExpression((prev) => `${prev}${display} ) `);
+      setIsNewInput(true);
+      operandReadyRef.current = true;
+    } catch (err: unknown) {
+      setDisplay(err instanceof Error ? err.message : 'Error');
+      setParenthesisStack([]);
+      setPreviousValue(null);
+      setPendingOp(null);
+      setIsNewInput(true);
+    }
+  }, [computeBinary, display, parenthesisStack, pendingOp, playClick, previousValue]);
+
+  // Paste a number from the clipboard ("$1,234.50", "(42)", " 3.5e3 ").
+  // Returns false when the text isn't a number for the current mode.
+  const pasteValue = useCallback(
+    (text: string): boolean => {
+      let t = text.trim().replace(/[\s,$€£¥_]/g, '');
+      if (/^\(.*\)$/.test(t)) t = `-${t.slice(1, -1)}`; // accounting negatives
+      t = t.replace(/^\+/, '').replace(/[−–]/g, '-');
+      if (!t) return false;
+      let value: string;
+      if (mode === 'programmer') {
+        const digits: Record<string, RegExp> = { HEX: /^-?[0-9a-f]+$/i, DEC: /^-?\d+$/, OCT: /^-?[0-7]+$/, BIN: /^-?[01]+$/ };
+        if (!digits[base].test(t)) return false;
+        value = formatBaseBigInt(clampBigInt(parseBaseString(t, base), bitWidth), base, bitWidth);
+      } else {
+        if (!/^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(t)) return false;
+        const n = Number(t);
+        if (!Number.isFinite(n)) return false;
+        value = /e/i.test(t) ? String(n) : t;
+      }
+      setDisplay(value);
+      setIsNewInput(true);
+      operandReadyRef.current = true;
+      if (hasEvaluated) {
+        setHasEvaluated(false);
+        setRunningEquation(value);
+      } else {
+        setRunningEquation((prev) => `${prev}${value}`);
+      }
+      return true;
+    },
+    [base, bitWidth, hasEvaluated, mode]
+  );
 
   // Mode switching
   const setMode = useCallback((newMode: CalcMode) => {
     playClick('fn');
     setModeState(newMode);
+    lastRepeatRef.current = null;
+    operandReadyRef.current = false;
     setPendingOp(null);
     setPreviousValue(null);
     setParenthesisStack([]);
@@ -1431,6 +1518,7 @@ export function useCalculator() {
     if (targetSlot) {
       setDisplay(targetSlot.value);
       setIsNewInput(true);
+      operandReadyRef.current = true;
     }
     const stats = getUserStats();
     if (stats.memoryOps.store >= 1 && stats.memoryOps.recall >= 1) {
@@ -1802,6 +1890,7 @@ export function useCalculator() {
     exportHistory,
     recordHistory,
     markModeUsed,
+    pasteValue,
     recordClipboardCopy,
     checkDailyStreak,
     // Custom Programmable Button
