@@ -2,18 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   History as HistoryIcon,
   Cog,
-  ChevronDown,
   Pin,
   RotateCcw,
-  Sliders,
-  Smartphone,
-  Tablet,
-  Monitor,
-  ChevronUp,
   Maximize2,
   Minimize2,
   FileText,
-  Rows,
   Dices,
   Trophy,
   Sparkles,
@@ -49,7 +42,6 @@ export const CalculatorPage: React.FC = () => {
   // Panels & Modals State
   const [historyOpen, setHistoryOpen] = useState(true);
   const [desktopRightTab, setDesktopRightTab] = useState<'history' | 'tape'>('history');
-  const [phoneHistoryOpen, setPhoneHistoryOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [formulaModalOpen, setFormulaModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -64,38 +56,6 @@ export const CalculatorPage: React.FC = () => {
   const [customModalOpen, setCustomModalOpen] = useState(false);
   const [activeProgrammableKey, setActiveProgrammableKey] = useState<ProgrammableKeyId>('custom');
 
-  // Viewport & Orientation Detection
-  const [viewport, setViewport] = useState(() => ({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
-    height: typeof window !== 'undefined' ? window.innerHeight : 768,
-  }));
-
-  useEffect(() => {
-    const handleResize = () => {
-      setViewport({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, []);
-
-  const isLandscape = viewport.width > viewport.height;
-  const devicePref = calc.settings.deviceLayout || 'auto';
-
-  // Responsive device categorization:
-  // Mobile devices (<768px) cannot be windowed — windowed mode is restricted exclusively to desktop.
-  const isMobileViewport = viewport.width < 768;
-  const isWindowed = devicePref === 'desktop' && !isMobileViewport;
-  const isPhone = isMobileViewport || devicePref === 'phone';
-  // Tablet & Landscape Side-by-Side: All other cases (e.g. tablets >=768px, phones in landscape, or full-screen desktop)
-  const isTabletOrLandscape = !isPhone && !isWindowed;
-
   // Scalable & Resizable Window State (For Desktop Windowed Mode)
   const [windowSize, setWindowSize] = useState<{ width: number; height: number } | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
@@ -106,42 +66,6 @@ export const CalculatorPage: React.FC = () => {
     width: 0,
     height: 0,
   });
-
-  // Tablet Split Ratio & Divider Dragging
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingDividerRef = useRef(false);
-
-  const tabletRatio = calc.settings.tabletRatio || 65; // percentage for calculator (45 to 80)
-
-  const handleDividerDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    isDraggingDividerRef.current = true;
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const containerW = splitContainerRef.current?.offsetWidth || window.innerWidth;
-    const initialRatio = calc.settings.tabletRatio || 65;
-
-    const handleMove = (moveEvt: MouseEvent | TouchEvent) => {
-      if (!isDraggingDividerRef.current) return;
-      const curX = 'touches' in moveEvt ? moveEvt.touches[0].clientX : moveEvt.clientX;
-      const deltaX = curX - startX;
-      const deltaRatio = (deltaX / containerW) * 100;
-      const newRatio = Math.min(Math.max(Math.round(initialRatio + deltaRatio), 45), 80);
-      calc.updateSettings({ tabletRatio: newRatio });
-    };
-
-    const handleEnd = () => {
-      isDraggingDividerRef.current = false;
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleMove);
-      window.removeEventListener('touchend', handleEnd);
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchmove', handleMove);
-    window.addEventListener('touchend', handleEnd);
-  };
 
   const toggleAlwaysOnTop = () => {
     const nextVal = !calc.settings.alwaysOnTop;
@@ -277,6 +201,12 @@ export const CalculatorPage: React.FC = () => {
     ? 690
     : 620;
 
+  // Desktop app: the OS window can't be made smaller than the calculator needs.
+  const zoomFactor = calc.settings.fontScale && calc.settings.fontScale !== 1 ? calc.settings.fontScale : 1;
+  useEffect(() => {
+    desktop?.setMinSize(Math.ceil(minWidth * zoomFactor) + 16, Math.ceil(minHeight * zoomFactor) + 16);
+  }, [desktop, minWidth, minHeight, zoomFactor]);
+
   // Dynamic Corner Radius Classes
   const cornerClasses = getCornerRadiusClasses(calc.settings.cornerRadius || 'extra');
 
@@ -360,13 +290,7 @@ export const CalculatorPage: React.FC = () => {
     onConstant: calc.insertConstant,
     onParenthesis: calc.handleParenthesis,
     onSetMode: calc.setMode,
-    onToggleHistory: () => {
-      if (isPhone) {
-        setPhoneHistoryOpen((v) => !v);
-      } else {
-        setHistoryOpen((v) => !v);
-      }
-    },
+    onToggleHistory: () => setHistoryOpen((v) => !v),
     onToggleMemory: () => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar }),
     onOpenShortcutsModal: () => setShortcutsModalOpen(true),
     onOpenFormulaModal: () => setFormulaModalOpen(true),
@@ -400,941 +324,29 @@ export const CalculatorPage: React.FC = () => {
       : 'keypad-weight-medium';
 
   // =========================================================================
-  // 1. PHONE PORTRAIT FULL-SCREEN LAYOUT WITH BOTTOM HISTORY BUTTON & DRAWER
-  // =========================================================================
-  if (isPhone) {
-    return (
-      <div
-        data-theme={activeTheme.id}
-        style={customThemeStyle}
-        className={`fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden flex flex-col transition-all duration-300 theme-${activeTheme.id} ${
-          activeTheme.id === 'custom' ? 'bg-[var(--theme-bg)]' : activeTheme.classes.bg
-        } text-foreground select-none ${fontClass} ${weightClass} ${
-          calc.settings.upsideDownMode ? 'rotate-180' : ''
-        }`}
-      >
-        {/* PHONE FULL-SCREEN HEADER */}
-        <header className="flex items-center justify-between px-3 py-1.5 w-full shrink-0 border-b border-border/40 bg-card/75 backdrop-blur-md z-10 max-w-md mx-auto">
-          <div className="flex items-center gap-1.5 min-w-0 shrink-0">
-            {/* Subtle background container for logo in light/dark mode */}
-            <div className="flex items-center gap-1.5 px-2.5 h-9 sm:h-10 rounded-xl bg-slate-100/90 dark:bg-muted/50 border border-slate-200/80 dark:border-border/50 shrink-0 shadow-2xs">
-              <img
-                src={dockalcLogo}
-                alt="Dockalc Logo"
-                className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-contain shadow-xs shrink-0"
-              />
-              <h1 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-foreground tracking-tight shrink-0 font-mono">
-                Dockalc
-              </h1>
-            </div>
-            <span className="text-muted-foreground/30 font-light text-sm shrink-0">|</span>
-
-            {/* Mode Switcher Custom Dropdown */}
-            <ModeDropdown
-              mode={calc.mode}
-              onSetMode={calc.setMode}
-              theme={activeTheme}
-              playClick={calc.playClick}
-            />
-          </div>
-
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-1 shrink-0 ml-auto">
-            {/* Desktop app: leave compact mode */}
-            {desktop && isCompact && (
-              <button
-                type="button"
-                onClick={() => calc.updateSettings({ compactOverlay: false })}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-                title="Exit compact mode"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* Fun Gadgets & Milestones Button */}
-            <button
-              type="button"
-              onClick={() => setGadgetsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Fun Gadgets & Milestones (Dice, Coin, Target 24, Milestones)"
-            >
-              <Trophy className="w-4 h-4" />
-            </button>
-
-            {/* Visual Formula Cheat Sheet */}
-            <button
-              type="button"
-              onClick={() => setFormulaModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Visual Formula Cheat Sheet (Alt+F)"
-            >
-              <BookOpen className="w-4 h-4" />
-            </button>
-
-            {/* Keyboard Shortcuts Overlay (hidden in compact mode to save room; ? still opens it) */}
-            {!(desktop && isCompact) && (
-              <button
-                type="button"
-                onClick={() => setShortcutsModalOpen(true)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-                title="Keyboard Shortcuts & Programmable Hotkeys (?)"
-              >
-                <Keyboard className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* Single Settings Button */}
-            <button
-              type="button"
-              onClick={() => setSettingsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Preferences & Themes"
-            >
-              <Cog className="w-4 h-4" />
-            </button>
-          </div>
-        </header>
-
-        {/* PHONE MAIN BODY: DISPLAY & KEYPAD */}
-        <main className="flex-1 min-h-0 flex flex-col p-2 sm:p-2.5 pb-1 gap-1 overflow-hidden max-w-md mx-auto w-full justify-between">
-          {calc.mode === 'finance' ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full" onChange={trackFinanceUse}>
-              <FinanceView
-                theme={activeTheme}
-                settings={calc.settings}
-                onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note, false)}
-                playClick={calc.playClick}
-              />
-            </div>
-          ) : calc.mode === 'convert' ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto w-full">
-              <ConvertView
-                theme={activeTheme}
-                settings={calc.settings}
-                onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr, false)}
-                  onConversion={trackConvertUse}
-                playClick={calc.playClick}
-                onUnlockMilestone={calc.unlockAchievement}
-              />
-            </div>
-          ) : (
-            <>
-              <div className="shrink-0 w-full">
-                <Display
-                  display={calc.display}
-                  expression={calc.expression}
-                  runningEquation={calc.runningEquation}
-                  mode={calc.mode}
-                  angleUnit={calc.angleUnit}
-                  onToggleAngleUnit={() => {
-                    const units = ['DEG', 'RAD', 'GRAD'] as const;
-                    const nextIdx = (units.indexOf(calc.angleUnit) + 1) % units.length;
-                    calc.setAngleUnit(units[nextIdx]);
-                  }}
-                  base={calc.base}
-                  onSetBase={calc.setBase}
-                  bitWidth={calc.bitWidth}
-                  onSetBitWidth={calc.setBitWidth}
-                  programmerBigInt={calc.programmerBigInt}
-                  onToggleBit={calc.toggleBitAt}
-                  hasMemoryValue={calc.hasMemoryValue}
-                  onToggleMemory={() => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar })}
-                  theme={activeTheme}
-                  settings={calc.settings}
-                  parenthesisDepth={calc.parenthesisDepth}
-                  onBackspace={calc.deleteChar}
-                  onClear={calc.clear}
-                  rpnStack={calc.rpnStack}
-                  onInsertExact={(val) => calc.setDisplay(val)}
-                />
-              </div>
-
-              <div className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden max-w-md mx-auto w-full p-1 sm:p-2 md:p-3">
-                <Keypad
-                  mode={calc.mode}
-                  base={calc.base}
-                  onDigit={calc.inputDigit}
-                  onDecimal={calc.inputDecimal}
-                  onOperator={calc.setOperator}
-                  onEquals={calc.calculateEquals}
-                  onClear={calc.clear}
-                  onBackspace={calc.deleteChar}
-                  onUnary={calc.applyUnaryFunction}
-                  onConstant={calc.insertConstant}
-                  onParenthesis={calc.handleParenthesis}
-                  is2nd={calc.is2nd}
-                  onToggle2nd={calc.toggle2nd}
-                  onBitShift={calc.applyBitShift}
-                  onMemoryClear={() => calc.memoryClear()}
-                  onMemoryRecall={() => calc.memoryRecall()}
-                  onMemoryStore={() => calc.memoryStore()}
-                  onMemoryAdd={() => calc.memoryAdd()}
-                  onMemorySubtract={() => calc.memorySubtract()}
-                  onToggleMemory={() => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar })}
-                  activeMemorySlot={calc.activeMemorySlot}
-                  hasMemoryValue={calc.hasMemoryValue}
-                  theme={activeTheme}
-                  settings={calc.settings}
-                  onCustomButton={calc.executeCustomButton}
-                  onOpenCustomModal={() => {
-                    setActiveProgrammableKey('custom');
-                    setCustomModalOpen(true);
-                  }}
-                  onProgrammableKey={(keyId) => {
-                    calc.executeProgrammableKey(keyId);
-                  }}
-                  onOpenProgrammableModal={(keyId) => {
-                    setActiveProgrammableKey(keyId);
-                    setCustomModalOpen(true);
-                  }}
-                  onRpnEnter={calc.rpnPush}
-                  onRpnSwap={calc.rpnSwap}
-                  onRpnDrop={calc.rpnDrop}
-                  onRpnRoll={calc.rpnRoll}
-                  rpnStack={calc.rpnStack}
-                />
-              </div>
-            </>
-          )}
-        </main>
-
-        {/* PHONES GET HISTORY ON THE BOTTOM WITH A DEDICATED BUTTON */}
-        <div className="shrink-0 p-1.5 sm:p-2 pb-2 border-t border-border/40 bg-card/80 backdrop-blur-md z-10">
-          <button
-            type="button"
-            onClick={() => setPhoneHistoryOpen((v) => !v)}
-            className={`w-full min-h-[48px] py-3 px-3.5 rounded-xl font-medium text-xs sm:text-sm flex items-center justify-between border transition-all cursor-pointer shadow-sm ${
-              phoneHistoryOpen
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-muted/80 hover:bg-muted text-foreground border-border/60'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <HistoryIcon className="w-4 h-4 text-current" />
-              <span className="font-bold">Calculation History</span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-background/50 border border-current/20">
-                {calc.history.length}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px]">
-              {calc.history.length > 0 && !phoneHistoryOpen && (
-                <span className="truncate max-w-[130px] font-mono opacity-80">
-                  {calc.history[0].expression} = {calc.history[0].result}
-                </span>
-              )}
-              <span className="font-semibold">{phoneHistoryOpen ? 'Hide History ▲' : 'Open History ▼'}</span>
-            </div>
-          </button>
-        </div>
-
-        {/* BOTTOM HISTORY DRAWER (SLIDE-UP SHEET FOR PHONE) */}
-        {phoneHistoryOpen && (
-          <>
-            <div
-              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-[2px] transition-opacity"
-              onClick={() => setPhoneHistoryOpen(false)}
-            />
-            <div
-              className={`fixed inset-x-0 bottom-0 z-50 h-[68dvh] max-h-[85dvh] flex flex-col border-t border-border/60 ${cornerClasses.card} rounded-b-none ${
-                activeTheme.id === 'nordic-light'
-                  ? 'bg-[#FFFFFF] text-[#0F172A] border-[#CBD5E1]'
-                  : activeTheme.id === 'dockalc-dark'
-                  ? 'bg-[#222226] text-[#F4F4F5] border-[#333338]'
-                  : activeTheme.id === 'custom'
-                  ? 'bg-[var(--theme-card)] text-foreground border-[var(--theme-border)]'
-                  : 'bg-[#181A20] text-foreground border-white/10'
-              } shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-250`}
-            >
-              {/* Drawer Top Grab Handle */}
-              <div
-                className="w-full pt-2.5 pb-1 flex flex-col items-center justify-center cursor-pointer select-none shrink-0"
-                onClick={() => setPhoneHistoryOpen(false)}
-              >
-                <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/50 transition-colors" />
-              </div>
-
-              {/* Phone Drawer Switcher if Paper Tape enabled */}
-              {calc.settings.showPaperTape !== false && (
-                <div className="px-3 pb-1.5 shrink-0">
-                  <div
-                    className={`flex items-center gap-1 p-0.5 rounded-lg border select-none ${
-                      activeTheme.id === 'nordic-light'
-                        ? 'bg-[#F1F5F9] border-[#CBD5E1]'
-                        : 'bg-muted/60 border-border/50'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setDesktopRightTab('history')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        desktopRightTab === 'history'
-                          ? activeTheme.id === 'nordic-light'
-                            ? 'bg-[#FFFFFF] text-[#0F172A] border border-[#CBD5E1] shadow-xs font-bold'
-                            : 'bg-card text-foreground shadow-xs font-bold border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <HistoryIcon className="w-3.5 h-3.5" />
-                      <span>History ({calc.history.length})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDesktopRightTab('tape')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        desktopRightTab === 'tape'
-                          ? activeTheme.id === 'nordic-light'
-                            ? 'bg-[#FFFFFF] text-[#0F172A] border border-[#CBD5E1] shadow-xs font-bold'
-                            : 'bg-card text-foreground shadow-xs font-bold border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5 text-primary" />
-                      <span>Paper Tape</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Panel Content (History / Paper Tape) with internal scroll */}
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                {desktopRightTab === 'tape' && calc.settings.showPaperTape !== false ? (
-                  <AccountantPaperTape
-                    history={calc.history}
-                    onRecall={(item, useResultOnly) => {
-                      calc.recallHistoryItem(item, useResultOnly);
-                      setPhoneHistoryOpen(false);
-                      toast.success('Recalled from tape', { description: item.result });
-                    }}
-                    onDelete={calc.deleteHistoryItem}
-                    onClear={calc.clearHistory}
-                    onUpdateNote={calc.updateHistoryItemNote}
-                    onExport={calc.exportHistory}
-                    theme={activeTheme}
-                    settings={calc.settings}
-                    onClose={() => setPhoneHistoryOpen(false)}
-                  />
-                ) : (
-                  <HistoryTape
-                    history={calc.history}
-                    onRecall={(item, useResultOnly) => {
-                      calc.recallHistoryItem(item, useResultOnly);
-                      setPhoneHistoryOpen(false);
-                      toast.success('Recalled from history', { description: item.result });
-                    }}
-                    onDelete={calc.deleteHistoryItem}
-                    onClear={calc.clearHistory}
-                    onUpdateNote={calc.updateHistoryItemNote}
-                    onExport={calc.exportHistory}
-                    theme={activeTheme}
-                    settings={calc.settings}
-                    onClose={() => setPhoneHistoryOpen(false)}
-                  />
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* MODALS */}
-        <ShortcutsModal
-          open={shortcutsModalOpen}
-          onOpenChange={setShortcutsModalOpen}
-          programmableKeys={calc.settings.programmableKeys}
-          onUpdateProgrammableKeys={(keys) => calc.updateSettings({ programmableKeys: keys })}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <VisualFormulaCheatSheetDialog
-          open={formulaModalOpen}
-          onOpenChange={setFormulaModalOpen}
-          onInsertExpression={(expr) => calc.setDisplay(expr)}
-          onInsertResult={(res) => calc.setDisplay(res)}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <SettingsModal
-          open={settingsModalOpen}
-          onOpenChange={setSettingsModalOpen}
-          mode={calc.mode}
-          onSetMode={calc.setMode}
-          settings={calc.settings}
-          onUpdateSettings={calc.updateSettings}
-          onOpenShortcuts={() => setShortcutsModalOpen(true)}
-          onOpenGadgets={() => {
-            setGadgetsInitialTab('dice');
-            setGadgetsModalOpen(true);
-          }}
-          onOpenMilestones={handleOpenMilestones}
-          isPhone={true}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-          onOpenCustomModal={() => {
-            setActiveProgrammableKey('custom');
-            setCustomModalOpen(true);
-          }}
-          onOpenProgrammableModal={(keyId) => {
-            setActiveProgrammableKey(keyId);
-            setCustomModalOpen(true);
-          }}
-        />
-        <GadgetsDialog
-          open={gadgetsModalOpen}
-          onOpenChange={setGadgetsModalOpen}
-          settings={calc.settings}
-          onUpdateSettings={calc.updateSettings}
-          onUnlockAchievement={calc.unlockAchievement}
-          initialTab={gadgetsInitialTab}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <CustomButtonModal
-          open={customModalOpen}
-          onOpenChange={setCustomModalOpen}
-          keyId={activeProgrammableKey}
-          config={calc.settings.programmableKeys?.[activeProgrammableKey] || calc.settings.customButton}
-          onSave={(newCfg) => calc.updateProgrammableKey(activeProgrammableKey, newCfg)}
-        />
-        <MilestoneCelebrationModal
-          achievement={calc.newlyUnlockedMilestone}
-          open={Boolean(calc.newlyUnlockedMilestone)}
-          onClose={calc.clearCelebratedMilestone}
-          onOpenAllBadges={() => setGadgetsModalOpen(true)}
-          totalUnlocked={calc.settings.unlockedAchievements?.length || 0}
-          totalAvailable={ACHIEVEMENTS_LIST.length}
-          remainingInQueue={calc.remainingInMilestoneQueue}
-        />
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 2. TABLETS & LANDSCAPE FULL-SCREEN: SIDE-BY-SIDE WITH SCREEN RATIO CONTROL
-  // =========================================================================
-  if (isTabletOrLandscape) {
-    return (
-      <div
-        data-theme={activeTheme.id}
-        style={customThemeStyle}
-        className={`fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden flex flex-col transition-all duration-300 theme-${activeTheme.id} ${
-          activeTheme.id === 'custom' ? 'bg-[var(--theme-bg)]' : activeTheme.classes.bg
-        } text-foreground select-none ${fontClass} ${weightClass} ${
-          calc.settings.upsideDownMode ? 'rotate-180' : ''
-        }`}
-      >
-        {/* TABLET / LANDSCAPE FULL-SCREEN HEADER */}
-        <header className="flex items-center justify-between px-3 sm:px-4 py-1.5 w-full shrink-0 border-b border-border/40 bg-card/75 backdrop-blur-md z-10">
-          {/* Left: App Logo, Title, Mode Selector */}
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink-0">
-            {/* Subtle background container for logo in light/dark mode */}
-            <div className="flex items-center gap-1.5 px-2.5 h-9 sm:h-10 rounded-xl bg-slate-100/90 dark:bg-muted/50 border border-slate-200/80 dark:border-border/50 shrink-0 shadow-2xs">
-              <img
-                src={dockalcLogo}
-                alt="Dockalc Logo"
-                className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-contain shadow-xs shrink-0"
-              />
-              <h1 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-foreground tracking-tight shrink-0 font-mono">
-                Dockalc
-              </h1>
-            </div>
-            <span className="text-muted-foreground/30 font-light text-sm shrink-0">|</span>
-
-            {/* Mode Switcher Custom Dropdown */}
-            <ModeDropdown
-              mode={calc.mode}
-              onSetMode={calc.setMode}
-              theme={activeTheme}
-              playClick={calc.playClick}
-            />
-          </div>
-
-          {/* Right: History Toggle, Layout Mode, Settings */}
-          <div className="flex items-center gap-1 shrink-0 ml-auto">
-            {/* History Toggle Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (!historyOpen) {
-                  setHistoryOpen(true);
-                  setDesktopRightTab('history');
-                } else if (desktopRightTab === 'history') {
-                  setHistoryOpen(false);
-                } else {
-                  setDesktopRightTab('history');
-                }
-              }}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                historyOpen && desktopRightTab === 'history'
-                  ? 'bg-primary/20 text-primary font-bold'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-              title={historyOpen && desktopRightTab === 'history' ? 'Hide History Panel' : 'Show History Panel (Ctrl+H)'}
-            >
-              <HistoryIcon className="w-4 h-4" />
-            </button>
-
-            {/* Desktop Paper Tape Button (Visible in Full Screen Desktop Mode when enabled) */}
-            {viewport.width >= 1024 && calc.settings.showPaperTape !== false && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!historyOpen) {
-                    setHistoryOpen(true);
-                    setDesktopRightTab('tape');
-                  } else if (desktopRightTab === 'tape') {
-                    setHistoryOpen(false);
-                  } else {
-                    setDesktopRightTab('tape');
-                  }
-                }}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                  historyOpen && desktopRightTab === 'tape'
-                    ? 'bg-primary/20 text-primary font-bold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-                title={historyOpen && desktopRightTab === 'tape' ? 'Hide Paper Tape' : 'Accountant Paper Tape with Annotations & Export'}
-              >
-                <FileText className="w-4 h-4 stroke-[1.75]" />
-              </button>
-            )}
-
-            {/* Desktop app: real window controls (pin on top, compact) */}
-            {desktop && (
-              <>
-                <button
-                  type="button"
-                  onClick={toggleAlwaysOnTop}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    isPinned
-                      ? 'bg-primary/20 text-primary font-bold'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                  title={isPinned ? 'Unpin window (Alt+P)' : 'Keep window on top (Alt+P)'}
-                >
-                  <Pin className={`w-4 h-4 ${isPinned ? 'rotate-45' : ''}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => calc.updateSettings({ compactOverlay: true })}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-                  title="Compact mode (display and keypad only)"
-                >
-                  <Minimize2 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-
-            {/* Desktop Windowed Toggle (For Desktop screens, browser only) */}
-            {!desktop && viewport.width >= 1024 && (
-              <button
-                type="button"
-                onClick={() => calc.updateSettings({ deviceLayout: 'desktop' })}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-                title="Switch to Windowed Desktop Mode"
-              >
-                <Minimize2 className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* Fun Gadgets & Milestones Button */}
-            <button
-              type="button"
-              onClick={() => setGadgetsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Fun Gadgets & Milestones (Dice, Coin, Target 24, Milestones)"
-            >
-              <Trophy className="w-4 h-4" />
-            </button>
-
-            {/* Visual Formula Cheat Sheet */}
-            <button
-              type="button"
-              onClick={() => setFormulaModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Visual Formula Cheat Sheet (Alt+F)"
-            >
-              <BookOpen className="w-4 h-4" />
-            </button>
-
-            {/* Keyboard Shortcuts Overlay */}
-            <button
-              type="button"
-              onClick={() => setShortcutsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Keyboard Shortcuts & Programmable Hotkeys (?)"
-            >
-              <Keyboard className="w-4 h-4" />
-            </button>
-
-            {/* Settings Button */}
-            <button
-              type="button"
-              onClick={() => setSettingsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Preferences & Themes"
-            >
-              <Cog className="w-4 h-4" />
-            </button>
-          </div>
-        </header>
-
-        {/* TABLET / LANDSCAPE MAIN BODY: SIDE-BY-SIDE SPLIT WITH RATIO SIZING */}
-        <div
-          ref={splitContainerRef}
-          className="flex-1 min-h-0 flex flex-row overflow-hidden relative select-text justify-center"
-        >
-          {/* LEFT COLUMN: CALCULATOR */}
-          <div
-            style={{ width: historyOpen ? `${tabletRatio}%` : '100%' }}
-            className="h-full flex flex-col p-2 sm:p-3 gap-1.5 sm:gap-2 overflow-hidden transition-[width] duration-75"
-          >
-            {calc.mode === 'finance' ? (
-              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto max-w-xl mx-auto w-full p-1 sm:p-2" onChange={trackFinanceUse}>
-                <FinanceView
-                  theme={activeTheme}
-                  settings={calc.settings}
-                  onLogHistory={(expr, res, note) => calc.recordHistory(expr, res, 'finance', undefined, note, false)}
-                  playClick={calc.playClick}
-                />
-              </div>
-            ) : calc.mode === 'convert' ? (
-              <div className="flex-1 min-h-0 flex flex-col overflow-y-auto max-w-md mx-auto w-full p-2">
-                <ConvertView
-                  theme={activeTheme}
-                  settings={calc.settings}
-                  onLogHistory={(expr, res) => calc.recordHistory(expr, res, 'convert', undefined, expr, false)}
-                  onConversion={trackConvertUse}
-                  playClick={calc.playClick}
-                  onUnlockMilestone={calc.unlockAchievement}
-                />
-              </div>
-            ) : (
-              <>
-                {/* Display */}
-                <div className="shrink-0 max-w-md mx-auto w-full">
-                  <Display
-                    display={calc.display}
-                    expression={calc.expression}
-                    runningEquation={calc.runningEquation}
-                    mode={calc.mode}
-                    angleUnit={calc.angleUnit}
-                    onToggleAngleUnit={() => {
-                      const units = ['DEG', 'RAD', 'GRAD'] as const;
-                      const nextIdx = (units.indexOf(calc.angleUnit) + 1) % units.length;
-                      calc.setAngleUnit(units[nextIdx]);
-                    }}
-                    base={calc.base}
-                    onSetBase={calc.setBase}
-                    bitWidth={calc.bitWidth}
-                    onSetBitWidth={calc.setBitWidth}
-                    programmerBigInt={calc.programmerBigInt}
-                    onToggleBit={calc.toggleBitAt}
-                    hasMemoryValue={calc.hasMemoryValue}
-                    onToggleMemory={() => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar })}
-                    theme={activeTheme}
-                    settings={calc.settings}
-                    parenthesisDepth={calc.parenthesisDepth}
-                    onBackspace={calc.deleteChar}
-                    onClear={calc.clear}
-                    rpnStack={calc.rpnStack}
-                    onInsertExact={(val) => calc.setDisplay(val)}
-                  />
-                </div>
-
-                {/* Keypad */}
-                <div className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden max-w-md mx-auto w-full p-1 sm:p-2 md:p-3">
-                  <Keypad
-                    mode={calc.mode}
-                    base={calc.base}
-                    onDigit={calc.inputDigit}
-                    onDecimal={calc.inputDecimal}
-                    onOperator={calc.setOperator}
-                    onEquals={calc.calculateEquals}
-                    onClear={calc.clear}
-                    onBackspace={calc.deleteChar}
-                    onUnary={calc.applyUnaryFunction}
-                    onConstant={calc.insertConstant}
-                    onParenthesis={calc.handleParenthesis}
-                    is2nd={calc.is2nd}
-                    onToggle2nd={calc.toggle2nd}
-                    onBitShift={calc.applyBitShift}
-                    onMemoryClear={() => calc.memoryClear()}
-                    onMemoryRecall={() => calc.memoryRecall()}
-                    onMemoryStore={() => calc.memoryStore()}
-                    onMemoryAdd={() => calc.memoryAdd()}
-                    onMemorySubtract={() => calc.memorySubtract()}
-                    onToggleMemory={() => calc.updateSettings({ showMemoryBar: !calc.settings.showMemoryBar })}
-                    activeMemorySlot={calc.activeMemorySlot}
-                    hasMemoryValue={calc.hasMemoryValue}
-                    theme={activeTheme}
-                    settings={calc.settings}
-                    onCustomButton={calc.executeCustomButton}
-                    onOpenCustomModal={() => {
-                      setActiveProgrammableKey('custom');
-                      setCustomModalOpen(true);
-                    }}
-                    onProgrammableKey={(keyId) => {
-                      calc.executeProgrammableKey(keyId);
-                    }}
-                    onOpenProgrammableModal={(keyId) => {
-                      setActiveProgrammableKey(keyId);
-                      setCustomModalOpen(true);
-                    }}
-                    onRpnEnter={calc.rpnPush}
-                    onRpnSwap={calc.rpnSwap}
-                    onRpnDrop={calc.rpnDrop}
-                    onRpnRoll={calc.rpnRoll}
-                    rpnStack={calc.rpnStack}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* INTERACTIVE DRAGGABLE DIVIDER (RESIZES RATIO ON TABLETS / LANDSCAPE) */}
-          {historyOpen && (
-            <div
-              onMouseDown={handleDividerDragStart}
-              onTouchStart={handleDividerDragStart}
-              className="w-2.5 sm:w-3 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors flex items-center justify-center shrink-0 z-20 group touch-none"
-              title="Drag to adjust Calculator vs History screen ratio"
-            >
-              <div className="w-1 h-12 rounded-full bg-border group-hover:bg-primary transition-colors" />
-            </div>
-          )}
-
-          {/* RIGHT COLUMN: TABLET SIDE HISTORY TAPE OR ACCOUNTANT PAPER TAPE */}
-          {historyOpen && (
-            <div
-              style={{ width: `${100 - tabletRatio}%` }}
-              className="h-full flex flex-col p-2.5 sm:p-3 pl-0 overflow-hidden border-l border-border/40"
-            >
-              {/* If on desktop screen (>=1024px) and Paper Tape is enabled, show switcher tab */}
-              {viewport.width >= 1024 && calc.settings.showPaperTape !== false ? (
-                <>
-                  <div
-                    className={`flex items-center gap-1 mb-2 p-0.5 rounded-lg border shrink-0 select-none ${
-                      activeTheme.id === 'nordic-light'
-                        ? 'bg-[#F1F5F9] border-[#CBD5E1]'
-                        : activeTheme.id === 'warm-terracotta'
-                        ? 'bg-[#1A1412] border-[#453631]'
-                        : activeTheme.id === 'solar-amber'
-                        ? 'bg-[#16120C] border-[#423321]'
-                        : activeTheme.id === 'cyber-emerald'
-                        ? 'bg-[#040804] border-[#16381C]'
-                        : activeTheme.id === 'custom'
-                        ? 'bg-[var(--theme-display-bg,#19191C)] border-[var(--theme-border,#333338)]'
-                        : 'bg-muted/60 border-border/50'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setDesktopRightTab('history')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        desktopRightTab === 'history'
-                          ? activeTheme.id === 'nordic-light'
-                            ? 'bg-[#FFFFFF] text-[#0F172A] border border-[#CBD5E1] shadow-xs font-bold'
-                            : activeTheme.id === 'warm-terracotta'
-                            ? 'bg-[#251D1A] text-[#FED7AA] border border-[#453631] shadow-xs font-bold'
-                            : activeTheme.id === 'solar-amber'
-                            ? 'bg-[#241C12] text-[#FEF3C7] border border-[#423321] shadow-xs font-bold'
-                            : activeTheme.id === 'cyber-emerald'
-                            ? 'bg-[#0A140B] text-[#86EFAC] border border-[#16381C] shadow-xs font-bold'
-                            : 'bg-card text-foreground shadow-xs font-bold border border-border/60'
-                          : activeTheme.id === 'nordic-light'
-                          ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
-                          : activeTheme.id === 'warm-terracotta'
-                          ? 'text-[#A88277] hover:text-[#FED7AA] hover:bg-[#251D1A]/60'
-                          : activeTheme.id === 'solar-amber'
-                          ? 'text-[#925C13] hover:text-[#FEF3C7] hover:bg-[#241C12]/60'
-                          : activeTheme.id === 'cyber-emerald'
-                          ? 'text-[#15803D] hover:text-[#86EFAC] hover:bg-[#0A140B]/60'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                      }`}
-                    >
-                      <HistoryIcon className="w-3.5 h-3.5" />
-                      <span>History ({calc.history.length})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDesktopRightTab('tape')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        desktopRightTab === 'tape'
-                          ? activeTheme.id === 'nordic-light'
-                            ? 'bg-[#FFFFFF] text-[#0F172A] border border-[#CBD5E1] shadow-xs font-bold'
-                            : activeTheme.id === 'warm-terracotta'
-                            ? 'bg-[#251D1A] text-[#FED7AA] border border-[#453631] shadow-xs font-bold'
-                            : activeTheme.id === 'solar-amber'
-                            ? 'bg-[#241C12] text-[#FEF3C7] border border-[#423321] shadow-xs font-bold'
-                            : activeTheme.id === 'cyber-emerald'
-                            ? 'bg-[#0A140B] text-[#86EFAC] border border-[#16381C] shadow-xs font-bold'
-                            : 'bg-card text-foreground shadow-xs font-bold border border-border/60'
-                          : activeTheme.id === 'nordic-light'
-                          ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
-                          : activeTheme.id === 'warm-terracotta'
-                          ? 'text-[#A88277] hover:text-[#FED7AA] hover:bg-[#251D1A]/60'
-                          : activeTheme.id === 'solar-amber'
-                          ? 'text-[#925C13] hover:text-[#FEF3C7] hover:bg-[#241C12]/60'
-                          : activeTheme.id === 'cyber-emerald'
-                          ? 'text-[#15803D] hover:text-[#86EFAC] hover:bg-[#0A140B]/60'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                      }`}
-                    >
-                      <FileText className={`w-3.5 h-3.5 ${activeTheme.id === 'warm-terracotta' ? 'text-[#EA580C]' : 'text-primary'}`} />
-                      <span>Paper Tape</span>
-                    </button>
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                    {desktopRightTab === 'tape' ? (
-                      <AccountantPaperTape
-                        history={calc.history}
-                        onRecall={(item, useResultOnly) => {
-                          calc.recallHistoryItem(item, useResultOnly);
-                          toast.success('Recalled from tape', { description: item.result });
-                        }}
-                        onDelete={calc.deleteHistoryItem}
-                        onClear={calc.clearHistory}
-                        onUpdateNote={calc.updateHistoryItemNote}
-                        onExport={calc.exportHistory}
-                        theme={activeTheme}
-                        settings={calc.settings}
-                        onClose={() => setHistoryOpen(false)}
-                      />
-                    ) : (
-                      <HistoryTape
-                        history={calc.history}
-                        onRecall={(item, useResultOnly) => {
-                          calc.recallHistoryItem(item, useResultOnly);
-                          toast.success('Recalled from history', { description: item.result });
-                        }}
-                        onDelete={calc.deleteHistoryItem}
-                        onClear={calc.clearHistory}
-                        onUpdateNote={calc.updateHistoryItemNote}
-                        onExport={calc.exportHistory}
-                        theme={activeTheme}
-                        settings={calc.settings}
-                        onClose={() => setHistoryOpen(false)}
-                      />
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                  <HistoryTape
-                    history={calc.history}
-                    onRecall={(item, useResultOnly) => {
-                      calc.recallHistoryItem(item, useResultOnly);
-                      toast.success('Recalled from history', { description: item.result });
-                    }}
-                    onDelete={calc.deleteHistoryItem}
-                    onClear={calc.clearHistory}
-                    onUpdateNote={calc.updateHistoryItemNote}
-                    onExport={calc.exportHistory}
-                    theme={activeTheme}
-                    settings={calc.settings}
-                    onClose={() => setHistoryOpen(false)}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* MODALS */}
-        <ShortcutsModal
-          open={shortcutsModalOpen}
-          onOpenChange={setShortcutsModalOpen}
-          programmableKeys={calc.settings.programmableKeys}
-          onUpdateProgrammableKeys={(keys) => calc.updateSettings({ programmableKeys: keys })}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <VisualFormulaCheatSheetDialog
-          open={formulaModalOpen}
-          onOpenChange={setFormulaModalOpen}
-          onInsertExpression={(expr) => calc.setDisplay(expr)}
-          onInsertResult={(res) => calc.setDisplay(res)}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <SettingsModal
-          open={settingsModalOpen}
-          onOpenChange={setSettingsModalOpen}
-          mode={calc.mode}
-          onSetMode={calc.setMode}
-          settings={calc.settings}
-          onUpdateSettings={calc.updateSettings}
-          onOpenShortcuts={() => setShortcutsModalOpen(true)}
-          onOpenGadgets={() => {
-            setGadgetsInitialTab('dice');
-            setGadgetsModalOpen(true);
-          }}
-          onOpenMilestones={handleOpenMilestones}
-          isPhone={false}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-          onOpenCustomModal={() => {
-            setActiveProgrammableKey('custom');
-            setCustomModalOpen(true);
-          }}
-          onOpenProgrammableModal={(keyId) => {
-            setActiveProgrammableKey(keyId);
-            setCustomModalOpen(true);
-          }}
-        />
-        <GadgetsDialog
-          open={gadgetsModalOpen}
-          onOpenChange={setGadgetsModalOpen}
-          settings={calc.settings}
-          onUpdateSettings={calc.updateSettings}
-          onUnlockAchievement={calc.unlockAchievement}
-          initialTab={gadgetsInitialTab}
-          theme={activeTheme}
-          customThemeStyle={customThemeStyle}
-        />
-        <CustomButtonModal
-          open={customModalOpen}
-          onOpenChange={setCustomModalOpen}
-          keyId={activeProgrammableKey}
-          config={calc.settings.programmableKeys?.[activeProgrammableKey] || calc.settings.customButton}
-          onSave={(newCfg) => calc.updateProgrammableKey(activeProgrammableKey, newCfg)}
-        />
-        <MilestoneCelebrationModal
-          achievement={calc.newlyUnlockedMilestone}
-          open={Boolean(calc.newlyUnlockedMilestone)}
-          onClose={calc.clearCelebratedMilestone}
-          onOpenAllBadges={() => setGadgetsModalOpen(true)}
-          totalUnlocked={calc.settings.unlockedAchievements?.length || 0}
-          totalAvailable={ACHIEVEMENTS_LIST.length}
-          remainingInQueue={calc.remainingInMilestoneQueue}
-        />
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 3. DESKTOP WINDOWED MODE (OPTIONAL RESIZABLE WINDOW WITH STRICT BOUNDS)
+  // DESKTOP WINDOW LAYOUT (the only layout)
   // =========================================================================
   return (
     <div
       style={customThemeStyle}
       className={`min-h-screen w-full transition-colors ${
         activeTheme.id === 'custom' ? 'bg-[var(--theme-bg)]' : activeTheme.classes.bg
-      } text-foreground relative flex flex-col justify-center items-center p-2 sm:p-4 md:p-6`}
+      } text-foreground relative flex flex-col justify-center items-center ${
+        desktop ? 'h-screen overflow-hidden p-2' : 'p-2 sm:p-4 md:p-6'
+      }`}
     >
-      {/* SCALABLE RESIZABLE WINDOW CONTAINER */}
+      {/* CALCULATOR WINDOW: fills the app window on desktop; a resizable card in a browser */}
       <div
         ref={windowRef}
         data-theme={activeTheme.id}
         style={{
           opacity: desktop ? 1 : windowOpacity,
           zoom: calc.settings.fontScale && calc.settings.fontScale !== 1 ? calc.settings.fontScale : undefined,
-          width: `${windowSize ? Math.max(windowSize.width, minWidth) : resolvedDefaultWidth}px`,
+          width: desktop ? '100%' : `${windowSize ? Math.max(windowSize.width, minWidth) : resolvedDefaultWidth}px`,
           minWidth: `${minWidth}px`,
           minHeight: `${minHeight}px`,
-          height: `${windowSize ? Math.max(windowSize.height, minHeight) : resolvedDefaultHeight}px`,
-          maxHeight: 'calc(100vh - 24px)',
+          height: desktop ? '100%' : `${windowSize ? Math.max(windowSize.height, minHeight) : resolvedDefaultHeight}px`,
+          maxHeight: desktop ? undefined : 'calc(100vh - 24px)',
           ...customThemeStyle,
         }}
         className={`select-none ${fontClass} ${weightClass} theme-${activeTheme.id} ${
@@ -1369,7 +381,7 @@ export const CalculatorPage: React.FC = () => {
                 alt="Dockalc Logo"
                 className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-contain shadow-xs shrink-0"
               />
-              <h1 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-foreground tracking-tight shrink-0 font-mono">
+              <h1 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-foreground tracking-tight shrink-0 font-mono max-[560px]:hidden">
                 Dockalc
               </h1>
             </div>
@@ -1392,14 +404,20 @@ export const CalculatorPage: React.FC = () => {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-0.5 shrink-0 ml-auto">
-            {/* Switch to Full Screen Mode */}
+            {/* Compact mode toggle */}
             <button
               type="button"
-              onClick={() => calc.updateSettings({ deviceLayout: 'auto' })}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              title="Switch to Full Screen Layout"
+              onClick={() => calc.updateSettings({ compactOverlay: !isCompact })}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isCompact ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+              title={isCompact ? 'Exit compact mode' : 'Compact mode (display and keypad only)'}
             >
-              <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.75]" />
+              {isCompact ? (
+                <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.75]" />
+              ) : (
+                <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.75]" />
+              )}
             </button>
 
             {/* Always on Top */}
@@ -1416,7 +434,8 @@ export const CalculatorPage: React.FC = () => {
               <Pin className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isPinned ? 'rotate-45' : ''}`} />
             </button>
 
-            {/* History Toggle */}
+            {/* History Toggle (history is hidden in compact mode) */}
+            {!isCompact && (
             <button
               type="button"
               onClick={() => {
@@ -1438,9 +457,10 @@ export const CalculatorPage: React.FC = () => {
             >
               <HistoryIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.75]" />
             </button>
+            )}
 
             {/* Desktop-Only Accountant Paper Tape Button (conditional on settings) */}
-            {calc.settings.showPaperTape !== false && (
+            {!isCompact && calc.settings.showPaperTape !== false && (
               <button
                 type="button"
                 onClick={() => {
@@ -1478,7 +498,7 @@ export const CalculatorPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setFormulaModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer max-[520px]:hidden"
               title="Visual Formula Cheat Sheet (Alt+F)"
             >
               <BookOpen className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[1.75]" />
@@ -1488,7 +508,7 @@ export const CalculatorPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setShortcutsModalOpen(true)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer max-[520px]:hidden"
               title="Keyboard Shortcuts & Programmable Hotkeys (?)"
             >
               <Keyboard className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[1.75]" />
@@ -1778,7 +798,8 @@ export const CalculatorPage: React.FC = () => {
           )}
         </div>
 
-        {/* DRAG HANDLE FOR WINDOWED MODE */}
+        {/* DRAG HANDLE (browser only; on desktop you resize the app window itself) */}
+        {!desktop && (
         <div
           onMouseDown={handleResizeStart}
           onTouchStart={handleResizeStart}
@@ -1800,6 +821,7 @@ export const CalculatorPage: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* MODALS */}

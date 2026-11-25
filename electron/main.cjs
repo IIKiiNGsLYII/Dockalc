@@ -151,6 +151,20 @@ if (!app.requestSingleInstanceLock()) {
         win.setOpacity(Number.isFinite(n) ? Math.min(Math.max(n, 0.3), 1) : 1);
     });
 
+    // The page reports the smallest size its layout fits in; grow the window if it's smaller.
+    ipcMain.on('window:set-min-size', (event, w, h) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || !Number.isFinite(w) || !Number.isFinite(h)) return;
+        const minW = Math.min(Math.max(Math.round(w), 300), 2000);
+        const minH = Math.min(Math.max(Math.round(h), 400), 1600);
+        win.setMinimumSize(minW, minH);
+        if (win.isMaximized() || win.isFullScreen()) return;
+        const b = win.getBounds();
+        if (b.width < minW || b.height < minH) {
+            win.setSize(Math.max(b.width, minW), Math.max(b.height, minH), true);
+        }
+    });
+
     ipcMain.on('window:set-compact', (event, on) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         if (!win) return;

@@ -6,6 +6,7 @@ export interface DockalcDesktopBridge {
   setAlwaysOnTop: (on: boolean) => void;
   setOpacity: (value: number) => void;
   setCompact: (on: boolean) => void;
+  setMinSize: (width: number, height: number) => void;
   readBackup: () => Promise<string | null>;
   writeBackup: (json: string) => void;
 }
